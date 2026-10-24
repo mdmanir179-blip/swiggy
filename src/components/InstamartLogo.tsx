@@ -5,17 +5,21 @@ interface LogoProps {
   size?: number;
 }
 
-export const InstamartLogo: React.FC<LogoProps> = ({ className = 'w-9 h-9', size = 36 }) => {
+export const InstamartLogo: React.FC<LogoProps> = ({ className = 'w-8 h-8 sm:w-9 sm:h-9', size }) => {
+  const dimension = size ? `${size}px` : undefined;
+
   return (
-    <div className={`relative flex items-center justify-center shrink-0 ${className}`} style={{ width: size, height: size }}>
+    <div 
+      className={`shrink-0 inline-flex items-center justify-center rounded-xl overflow-hidden shadow-xs select-none ${className}`} 
+      style={dimension ? { width: dimension, height: dimension, minWidth: dimension, minHeight: dimension } : undefined}
+    >
       <svg 
         viewBox="0 0 100 100" 
-        className="w-full h-full drop-shadow-sm" 
+        className="w-full h-full block" 
         fill="none" 
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          {/* Brand Gradients */}
           <linearGradient id="imCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#ff5200" />
             <stop offset="50%" stopColor="#f59e0b" />
@@ -33,32 +37,32 @@ export const InstamartLogo: React.FC<LogoProps> = ({ className = 'w-9 h-9', size
           </linearGradient>
         </defs>
 
-        {/* Outer Rounded Container with subtle border */}
+        {/* Base Card Background */}
         <rect 
-          x="4" 
-          y="4" 
-          width="92" 
-          height="92" 
+          x="3" 
+          y="3" 
+          width="94" 
+          height="94" 
           rx="22" 
           fill="url(#imCardGrad)" 
         />
         <rect 
-          x="4" 
-          y="4" 
-          width="92" 
-          height="92" 
+          x="3" 
+          y="3" 
+          width="94" 
+          height="94" 
           rx="22" 
-          stroke="rgba(255, 255, 255, 0.3)" 
+          stroke="rgba(255, 255, 255, 0.4)" 
           strokeWidth="3" 
         />
 
-        {/* Receipt / Invoice Outline shape in background */}
+        {/* Receipt / Invoice Silhouette */}
         <path
           d="M26 24C26 21.7909 27.7909 20 30 20H70C72.2091 20 74 21.7909 74 24V76L66 71L58 76L50 71L42 76L34 71L26 76V24Z"
-          fill="rgba(15, 23, 42, 0.25)"
+          fill="rgba(15, 23, 42, 0.28)"
         />
 
-        {/* Swift Commerce Lightning Bolt (Instamart Speed Symbol) */}
+        {/* Quick Commerce Lightning Bolt */}
         <path
           d="M54 22L32 50H48L44 76L68 46H52L54 22Z"
           fill="url(#boltGrad)"
@@ -67,21 +71,21 @@ export const InstamartLogo: React.FC<LogoProps> = ({ className = 'w-9 h-9', size
           strokeLinejoin="round"
         />
 
-        {/* Currency & Growth Badge (₹ Indicator in bottom corner) */}
+        {/* Financial Rupee Emblem */}
         <circle 
           cx="72" 
           cy="72" 
-          r="16" 
+          r="15" 
           fill="url(#emeraldGrad)" 
           stroke="#0f172a" 
           strokeWidth="2.5"
         />
         <text 
           x="72" 
-          y="77.5" 
+          y="77" 
           fontFamily="system-ui, -apple-system, sans-serif" 
           fontWeight="900" 
-          fontSize="15" 
+          fontSize="14" 
           fill="#ffffff" 
           textAnchor="middle"
         >
