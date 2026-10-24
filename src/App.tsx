@@ -130,20 +130,24 @@ export default function App() {
   // Check URL on startup for shared dataset link (?share=... or #data=...)
   useEffect(() => {
     (async () => {
-      const shared = await loadSharedDatasetFromUrl();
-      if (shared && ((shared.invoices && shared.invoices.length > 0) || (shared.payments && shared.payments.length > 0))) {
-        if (shared.invoices && shared.invoices.length > 0) {
-          setInvoices(shared.invoices);
+      try {
+        const shared = await loadSharedDatasetFromUrl();
+        if (shared && ((shared.invoices && shared.invoices.length > 0) || (shared.payments && shared.payments.length > 0))) {
+          if (shared.invoices && shared.invoices.length > 0) {
+            setInvoices(shared.invoices);
+          }
+          if (shared.payments && shared.payments.length > 0) {
+            setPayments(shared.payments);
+          }
+          setSharedNotice({
+            vendorName: shared.vendorName || 'Shared Vendor',
+            count: shared.invoices?.length || 0,
+            note: shared.note,
+            createdAt: shared.createdAt,
+          });
         }
-        if (shared.payments && shared.payments.length > 0) {
-          setPayments(shared.payments);
-        }
-        setSharedNotice({
-          vendorName: shared.vendorName || 'Shared Vendor',
-          count: shared.invoices?.length || 0,
-          note: shared.note,
-          createdAt: shared.createdAt,
-        });
+      } catch (err) {
+        console.warn('Could not parse shared dataset from URL:', err);
       }
     })();
   }, []);
