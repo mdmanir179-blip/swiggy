@@ -1,24 +1,14 @@
-// Ensure window.fetch is safely configurable before any imports evaluate
-try {
-  if (typeof window !== 'undefined') {
-    let currentFetch = window.fetch ? window.fetch.bind(window) : undefined;
-    Object.defineProperty(window, 'fetch', {
-      get() {
-        return currentFetch;
-      },
-      set(val) {
-        currentFetch = val;
-      },
-      configurable: true,
-      enumerable: true,
-    });
-  }
-} catch {
-  // safe fallback
-}
-
-import {createRoot} from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import './index.css';
 
-createRoot(document.getElementById('root')!).render(<App />);
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  const root = createRoot(rootElement);
+  root.render(
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
