@@ -3,24 +3,26 @@ import { usePWAInstall } from '../hooks/usePWAInstall';
 import { Download, Smartphone, X, Share } from 'lucide-react';
 
 export const PWAInstallButton: React.FC = () => {
+  // CRITICAL: All React hooks MUST be declared at the top before any early return!
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const [showDesktopGuide, setShowDesktopGuide] = useState(false);
 
   // If already running as an installed PWA, hide the button
   if (isInstalled) {
     return null;
   }
 
-  // Chromium / Android / Desktop flow
+  // Chromium / Android / Desktop direct install flow
   if (isInstallable) {
     return (
       <button
         onClick={install}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-950 bg-amber-400 hover:bg-amber-300 dark:bg-amber-400 dark:hover:bg-amber-300 rounded-lg transition-colors whitespace-nowrap shadow-xs animate-pulse"
-        title="Save & Install Instamart Payment Tracker as desktop or mobile app"
+        className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-amber-950 bg-amber-400 hover:bg-amber-300 dark:bg-amber-400 dark:hover:bg-amber-300 rounded-lg transition-colors whitespace-nowrap shadow-xs"
+        title="Install Instamart Payment Tracker as desktop or mobile app"
       >
         <Download className="w-3.5 h-3.5" />
-        <span>Install App</span>
+        <span className="hidden sm:inline">Install App</span>
       </button>
     );
   }
@@ -31,11 +33,11 @@ export const PWAInstallButton: React.FC = () => {
       <>
         <button
           onClick={() => setShowIOSGuide(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors whitespace-nowrap"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors whitespace-nowrap"
           title="Install on iPhone / iPad"
         >
           <Smartphone className="w-3.5 h-3.5 text-amber-500" />
-          <span>Save App</span>
+          <span className="hidden sm:inline">Save App</span>
         </button>
 
         {showIOSGuide && (
@@ -89,14 +91,12 @@ export const PWAInstallButton: React.FC = () => {
     );
   }
 
-  const [showDesktopGuide, setShowDesktopGuide] = useState(false);
-
-  // Generic fallback if browser hasn't fired beforeinstallprompt yet or for manual installation
+  // Generic fallback if browser hasn't fired beforeinstallprompt yet or for desktop browsers
   return (
     <>
       <button
         onClick={() => setShowDesktopGuide(true)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors whitespace-nowrap"
+        className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors whitespace-nowrap"
         title="Save app to Computer or Phone"
       >
         <Smartphone className="w-3.5 h-3.5 text-amber-500" />
