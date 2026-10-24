@@ -1,0 +1,6 @@
+{
+  "name": "Instamart Payment Tracker",
+  "description": "Comprehensive financial analytics, invoice reconciliation, and payment tracking for Instamart vendors with accurate INR accounting, automated Excel/CSV processing, and export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
