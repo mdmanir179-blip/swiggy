@@ -4,28 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
-    <!-- Auto-purge rogue service workers and stale cache -->
+    <!-- Capture PWA install event early so it is never missed -->
     <script>
-      (function() {
-        try {
-          if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(regs) {
-              for (var i = 0; i < regs.length; i++) {
-                regs[i].unregister();
-              }
-            });
-          }
-          if (typeof caches !== 'undefined') {
-            caches.keys().then(function(keys) {
-              for (var j = 0; j < keys.length; j++) {
-                caches.delete(keys[j]);
-              }
-            });
-          }
-        } catch (e) {
-          // ignore
-        }
-      })();
+      window.__deferredPWAInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__deferredPWAInstallPrompt = e;
+        window.dispatchEvent(new CustomEvent('pwa-prompt-ready', { detail: e }));
+      });
     </script>
 
     <!-- PWA and Browser Color Meta Tags -->
@@ -34,6 +20,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Instamart" />
+
+    <!-- Web App Manifest for Desktop & Mobile Installation -->
+    <link rel="manifest" href="/manifest.json" />
 
     <!-- Favicon & Icons -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
