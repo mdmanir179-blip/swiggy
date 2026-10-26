@@ -154,7 +154,7 @@ export function mapRowsToInvoices(rawRows: Record<string, any>[]): InvoiceRecord
       }
     }
 
-    // 5. Last Payment Date
+    // 5. Last Payment Date (Resilient matching for Instamart & ERP column variants)
     const lastPaymentDate = parseAndFormatDate(getVal(
       'Last Payment Date', 
       'Payment Date', 
@@ -164,12 +164,21 @@ export function mapRowsToInvoices(rawRows: Record<string, any>[]): InvoiceRecord
       'PaidDate', 
       'Last Payment Dt',
       'Last Paid Date',
+      'Date of Payment',
+      'Date of Last Payment',
+      'Last Payment',
+      'Last Pmt Date',
+      'Last Pmt Dt',
+      'Payment Trxn Date',
+      'Bank Payment Date',
       'Disbursed Date', 
       'Settlement Date', 
       'Value Date',
       'Remittance Date',
       'Pmt Date',
-      'Payment Dt'
+      'Payment Dt',
+      'UTR Date',
+      'Payment Release Date'
     ));
 
     const totalDeductions = tdsTcs + purchaseReturnAmount + brandDiscountPromoClaims + otherDebitAmount + otherAdjustments;
@@ -286,8 +295,15 @@ export async function parseUploadedFile(file: File): Promise<ParseResult> {
 
   try {
     const arrayBuffer = await file.arrayBuffer();
-    // Enable cellDates: true so Excel serial dates are converted to Date objects
-    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+    // Enable cellDates, cellText, and explicitly set dateNF to 'dd-mm-yyyy'
+    // so Excel serial dates are formatted consistently in DD-MM-YYYY without timezone skew
+    const workbook = XLSX.read(arrayBuffer, { 
+      type: 'array', 
+      cellDates: true,
+      cellNF: true,
+      cellText: true,
+      dateNF: 'dd-mm-yyyy'
+    });
     let invoices: InvoiceRecord[] = [];
     let payments: PaymentRecord[] = [];
     let primaryType: DetectedFileType = 'unknown';

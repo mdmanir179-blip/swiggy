@@ -151,7 +151,7 @@ export function generateInvoiceReportPDF(
     formatINR(inv.paymentAmount).replace('₹', ''),
     formatINR(inv.outstandingPayment).replace('₹', ''),
     inv.dueDate || '—',
-    inv.lastPaymentDate || (inv.paymentAmount > 0 ? 'Settled' : '—'), // Explicit Last Payment Date
+    inv.lastPaymentDate || '—', // Exact verbatim Last Payment Date from sheet
     inv.paymentStatus || 'Unpaid',
     inv.paymentReferenceNo || '—'
   ]);

@@ -100,7 +100,7 @@ export const PrintStatement: React.FC<PrintStatementProps> = ({
                 <td className="py-1 px-2 text-right text-emerald-800">{formatINR(inv.paymentAmount)}</td>
                 <td className="py-1 px-2 text-right font-bold">{formatINR(inv.outstandingPayment)}</td>
                 <td className="py-1 px-2">{inv.dueDate || '—'}</td>
-                <td className="py-1 px-2 font-bold text-emerald-800">{inv.lastPaymentDate || (inv.paymentAmount > 0 ? 'Settled' : '—')}</td>
+                <td className="py-1 px-2 font-bold text-emerald-800">{inv.lastPaymentDate || '—'}</td>
                 <td className="py-1 px-2 font-sans capitalize">{inv.paymentStatus}</td>
               </tr>
             ))}

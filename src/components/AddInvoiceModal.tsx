@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { InvoiceRecord } from '../types';
 import { formatINR } from '../utils/currency';
-import { PlusCircle, X, Calendar, FileText, Building2, CreditCard, Check, Calculator } from 'lucide-react';
+import { PlusCircle, X, Calendar, FileText, CreditCard, Check, Calculator } from 'lucide-react';
 
 interface AddInvoiceModalProps {
   isOpen: boolean;
@@ -28,8 +28,8 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
   onClose,
   onSaveInvoice,
   initialInvoice,
-  defaultVendorName = 'The Brothers and Co',
-  defaultVendorCode = '1N96368405'
+  defaultVendorName = '',
+  defaultVendorCode = ''
 }) => {
   const getTodayFormatted = () => {
     const today = new Date();
@@ -39,84 +39,87 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
     return `${dd}-${mm}-${yyyy}`;
   };
 
-  const getFutureDateFormatted = (daysAhead: number = 30) => {
-    const future = new Date();
-    future.setDate(future.getDate() + daysAhead);
-    const dd = String(future.getDate()).padStart(2, '0');
-    const mm = String(future.getMonth() + 1).padStart(2, '0');
-    const yyyy = future.getFullYear();
-    return `${dd}-${mm}-${yyyy}`;
-  };
-
-  // Form states
+  // Form states - Completely empty by default
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [invoiceDate, setInvoiceDate] = useState(getTodayFormatted());
+  const [invoiceDate, setInvoiceDate] = useState('');
   const [poNumber, setPoNumber] = useState('');
   const [grnNumber, setGrnNumber] = useState('');
-  const [warehouseName, setWarehouseName] = useState('BLR-KRP-01 (Bengaluru)');
-  const [city, setCity] = useState('Bengaluru');
-  const [state, setState] = useState('Karnataka');
+  const [warehouseName, setWarehouseName] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
   
-  // Amounts
-  const [grossAmount, setGrossAmount] = useState<number>(0);
-  const [tdsTcs, setTdsTcs] = useState<number>(0);
-  const [purchaseReturn, setPurchaseReturn] = useState<number>(0);
-  const [promoClaims, setPromoClaims] = useState<number>(0);
-  const [otherDebits, setOtherDebits] = useState<number>(0);
-  const [otherAdjustments, setOtherAdjustments] = useState<number>(0);
+  // Amounts (stored as string | number so empty displays blank, not 0)
+  const [grossAmount, setGrossAmount] = useState<string | number>('');
+  const [tdsTcs, setTdsTcs] = useState<string | number>('');
+  const [purchaseReturn, setPurchaseReturn] = useState<string | number>('');
+  const [promoClaims, setPromoClaims] = useState<string | number>('');
+  const [otherDebits, setOtherDebits] = useState<string | number>('');
+  const [otherAdjustments, setOtherAdjustments] = useState<string | number>('');
   
   // Payment
   const [paymentStatus, setPaymentStatus] = useState<string>('Unpaid');
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentAmount, setPaymentAmount] = useState<string | number>('');
   const [lastPaymentDate, setLastPaymentDate] = useState<string>('');
   const [paymentRef, setPaymentRef] = useState<string>('');
-  const [dueDate, setDueDate] = useState(getFutureDateFormatted(30));
-  const [creditPeriod, setCreditPeriod] = useState<number>(30);
+  const [dueDate, setDueDate] = useState('');
+  const [creditPeriod, setCreditPeriod] = useState<string | number>('');
 
-  // Computed live
-  const totalDeductions = tdsTcs + purchaseReturn + promoClaims + otherDebits + otherAdjustments;
-  const netPayable = Math.max(0, grossAmount - totalDeductions);
-  const outstanding = Math.max(0, netPayable - paymentAmount);
+  // Parsed numerical values for live arithmetic
+  const parsedGross = typeof grossAmount === 'number' ? grossAmount : parseFloat(grossAmount) || 0;
+  const parsedTds = typeof tdsTcs === 'number' ? tdsTcs : parseFloat(tdsTcs) || 0;
+  const parsedReturn = typeof purchaseReturn === 'number' ? purchaseReturn : parseFloat(purchaseReturn) || 0;
+  const parsedPromo = typeof promoClaims === 'number' ? promoClaims : parseFloat(promoClaims) || 0;
+  const parsedDebits = typeof otherDebits === 'number' ? otherDebits : parseFloat(otherDebits) || 0;
+  const parsedAdjustments = typeof otherAdjustments === 'number' ? otherAdjustments : parseFloat(otherAdjustments) || 0;
+  const parsedPaid = typeof paymentAmount === 'number' ? paymentAmount : parseFloat(paymentAmount) || 0;
+
+  const totalDeductions = parsedTds + parsedReturn + parsedPromo + parsedDebits + parsedAdjustments;
+  const netPayable = Math.max(0, parsedGross - totalDeductions);
+  const outstanding = Math.max(0, netPayable - parsedPaid);
 
   useEffect(() => {
     if (initialInvoice && isOpen) {
+      // Editing existing invoice
       setInvoiceNumber(initialInvoice.invoiceNumber || '');
-      setInvoiceDate(initialInvoice.invoiceAccountingDate || getTodayFormatted());
+      setInvoiceDate(initialInvoice.invoiceAccountingDate || '');
       setPoNumber(initialInvoice.poNumber || '');
       setGrnNumber(initialInvoice.grnNumber || '');
-      setWarehouseName(initialInvoice.warehouseName || 'BLR-KRP-01 (Bengaluru)');
+      setWarehouseName(initialInvoice.warehouseName || '');
       setCity(initialInvoice.city || '');
       setState(initialInvoice.state || '');
-      setGrossAmount(initialInvoice.invoicesRecorded || initialInvoice.grossGrnAmount || 0);
-      setTdsTcs(initialInvoice.tdsTcs || 0);
-      setPurchaseReturn(initialInvoice.purchaseReturnAmount || 0);
-      setPromoClaims(initialInvoice.brandDiscountPromoClaims || 0);
-      setOtherDebits(initialInvoice.otherDebitAmount || 0);
-      setOtherAdjustments(initialInvoice.otherAdjustments || 0);
+      setGrossAmount(initialInvoice.invoicesRecorded || initialInvoice.grossGrnAmount || '');
+      setTdsTcs(initialInvoice.tdsTcs || '');
+      setPurchaseReturn(initialInvoice.purchaseReturnAmount || '');
+      setPromoClaims(initialInvoice.brandDiscountPromoClaims || '');
+      setOtherDebits(initialInvoice.otherDebitAmount || '');
+      setOtherAdjustments(initialInvoice.otherAdjustments || '');
       setPaymentStatus(initialInvoice.paymentStatus || 'Unpaid');
-      setPaymentAmount(initialInvoice.paymentAmount || 0);
+      setPaymentAmount(initialInvoice.paymentAmount || '');
       setLastPaymentDate(initialInvoice.lastPaymentDate || '');
       setPaymentRef(initialInvoice.paymentReferenceNo || '');
-      setDueDate(initialInvoice.dueDate || getFutureDateFormatted(30));
-      setCreditPeriod(initialInvoice.creditPeriod || 30);
+      setDueDate(initialInvoice.dueDate || '');
+      setCreditPeriod(initialInvoice.creditPeriod || '');
     } else if (isOpen) {
-      // New invoice defaults
-      setInvoiceNumber(`INV-${Date.now().toString().slice(-6)}`);
-      setInvoiceDate(getTodayFormatted());
-      setPoNumber(`PO-${Date.now().toString().slice(-6)}`);
-      setGrnNumber(`GRN-${Date.now().toString().slice(-6)}`);
-      setGrossAmount(25000);
-      setTdsTcs(250);
-      setPurchaseReturn(0);
-      setPromoClaims(0);
-      setOtherDebits(0);
-      setOtherAdjustments(0);
+      // Adding new invoice: ALWAYS EMPTY BY DEFAULT
+      setInvoiceNumber('');
+      setInvoiceDate('');
+      setPoNumber('');
+      setGrnNumber('');
+      setWarehouseName('');
+      setCity('');
+      setState('');
+      setGrossAmount('');
+      setTdsTcs('');
+      setPurchaseReturn('');
+      setPromoClaims('');
+      setOtherDebits('');
+      setOtherAdjustments('');
       setPaymentStatus('Unpaid');
-      setPaymentAmount(0);
+      setPaymentAmount('');
       setLastPaymentDate('');
       setPaymentRef('');
-      setDueDate(getFutureDateFormatted(30));
-      setCreditPeriod(30);
+      setDueDate('');
+      setCreditPeriod('');
     }
   }, [initialInvoice, isOpen]);
 
@@ -124,12 +127,14 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
   const handleStatusChange = (newStatus: string) => {
     setPaymentStatus(newStatus);
     if (newStatus === 'Paid') {
-      setPaymentAmount(netPayable);
+      if (netPayable > 0) {
+        setPaymentAmount(netPayable);
+      }
       if (!lastPaymentDate) setLastPaymentDate(getTodayFormatted());
-      if (!paymentRef) setPaymentRef(`UTR${Date.now().toString().slice(-8)}`);
     } else if (newStatus === 'Unpaid') {
-      setPaymentAmount(0);
+      setPaymentAmount('');
       setLastPaymentDate('');
+      setPaymentRef('');
     }
   };
 
@@ -141,7 +146,7 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
       alert('Please enter an Invoice Number');
       return;
     }
-    if (grossAmount <= 0) {
+    if (parsedGross <= 0) {
       alert('Gross Amount must be greater than 0');
       return;
     }
@@ -150,40 +155,42 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
       ? 'No due' 
       : 'Not Due';
 
+    const parsedCreditDays = typeof creditPeriod === 'number' ? creditPeriod : parseInt(creditPeriod, 10) || 0;
+
     const newInvoice: InvoiceRecord = {
       id: initialInvoice?.id || `inv-manual-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       organizationName: initialInvoice?.organizationName || 'SCOOTSY LOGISTICS PRIVATE LIMITED',
-      vendorName: initialInvoice?.vendorName || defaultVendorName,
-      vendorCode: initialInvoice?.vendorCode || defaultVendorCode,
-      gstin: initialInvoice?.gstin || '19BRXPA0554J1ZF',
-      pan: initialInvoice?.pan || 'BRXPA0554J',
-      warehouseName,
-      city: city || warehouseName.split('(')[1]?.replace(')', '') || 'Direct',
-      state: state || 'State',
+      vendorName: initialInvoice?.vendorName || defaultVendorName || 'Vendor',
+      vendorCode: initialInvoice?.vendorCode || defaultVendorCode || 'MANUAL',
+      gstin: initialInvoice?.gstin || '',
+      pan: initialInvoice?.pan || '',
+      warehouseName: warehouseName.trim(),
+      city: city.trim() || (warehouseName.includes('(') ? warehouseName.split('(')[1]?.replace(')', '') : 'Direct'),
+      state: state.trim() || 'India',
       statusOfInvoice: 'Posted',
-      poNumber: poNumber || 'PO-MANUAL',
-      poDate: invoiceDate,
-      poAmount: grossAmount,
-      grnNumber: grnNumber || 'GRN-MANUAL',
-      grnDate: invoiceDate,
-      grossGrnAmount: grossAmount,
+      poNumber: poNumber.trim(),
+      poDate: invoiceDate.trim(),
+      poAmount: parsedGross,
+      grnNumber: grnNumber.trim(),
+      grnDate: invoiceDate.trim(),
+      grossGrnAmount: parsedGross,
       invoiceNumber: invoiceNumber.trim(),
       invoiceAccountingDate: invoiceDate.trim(),
-      invoicesRecorded: grossAmount,
-      tdsTcs,
-      purchaseReturnAmount: purchaseReturn,
-      brandDiscountPromoClaims: promoClaims,
-      otherDebitAmount: otherDebits,
-      otherAdjustments,
+      invoicesRecorded: parsedGross,
+      tdsTcs: parsedTds,
+      purchaseReturnAmount: parsedReturn,
+      brandDiscountPromoClaims: parsedPromo,
+      otherDebitAmount: parsedDebits,
+      otherAdjustments: parsedAdjustments,
       totalDeductions,
       netPayableAmount: netPayable,
-      otherAdjustmentDate: otherAdjustments > 0 ? invoiceDate : '',
+      otherAdjustmentDate: parsedAdjustments > 0 ? invoiceDate.trim() : '',
       invoiceStatus: 'Reconciled',
-      paymentAmount,
+      paymentAmount: parsedPaid,
       paymentReferenceNo: paymentRef.trim(),
       outstandingPayment: outstanding,
       dueDate: dueDate.trim(),
-      creditPeriod,
+      creditPeriod: parsedCreditDays,
       overdueStatus: calculatedOverdueStatus,
       paymentStatus: paymentStatus as any,
       lastPaymentDate: lastPaymentDate.trim()
@@ -213,7 +220,7 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
                 {initialInvoice ? 'Edit Invoice Record' : 'Manual Invoice Data Entry'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Manually record or edit an invoice in the active Instamart ledger
+                Enter invoice details manually into the ledger
               </p>
             </div>
           </div>
@@ -230,7 +237,7 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
         <div className="px-5 py-3 bg-slate-100 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 grid grid-cols-4 gap-2 text-center text-xs">
           <div>
             <span className="text-[10px] text-slate-500 uppercase font-semibold block">Gross Sales</span>
-            <span className="font-mono font-bold text-slate-900 dark:text-white">{formatINR(grossAmount)}</span>
+            <span className="font-mono font-bold text-slate-900 dark:text-white">{formatINR(parsedGross)}</span>
           </div>
           <div>
             <span className="text-[10px] text-slate-500 uppercase font-semibold block">Deductions</span>
@@ -269,30 +276,41 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold mb-1">Invoice Date (DD-MM-YYYY) *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-semibold">Invoice Date (DD-MM-YYYY) *</label>
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceDate(getTodayFormatted())}
+                    className="text-[10px] text-amber-600 dark:text-amber-400 hover:underline"
+                  >
+                    Set Today
+                  </button>
+                </div>
                 <input
                   type="text"
                   required
                   value={invoiceDate}
                   onChange={(e) => setInvoiceDate(e.target.value)}
-                  placeholder="e.g. 15-10-2026"
+                  placeholder="DD-MM-YYYY"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold mb-1">Warehouse Name *</label>
-                <select
+                <label className="block text-[11px] font-semibold mb-1">Warehouse Name</label>
+                <input
+                  type="text"
                   value={warehouseName}
                   onChange={(e) => setWarehouseName(e.target.value)}
+                  placeholder="Select or enter warehouse..."
+                  list="common-warehouses-list"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
-                >
+                />
+                <datalist id="common-warehouses-list">
                   {COMMON_WAREHOUSES.map((wh) => (
-                    <option key={wh} value={wh}>{wh}</option>
+                    <option key={wh} value={wh} />
                   ))}
-                  <option value="Direct Fulfillment Center">Direct Fulfillment Center</option>
-                  <option value="Other Regional Hub">Other Regional Hub</option>
-                </select>
+                </datalist>
               </div>
 
               <div>
@@ -323,7 +341,7 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
                   type="text"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  placeholder="e.g. 15-11-2026"
+                  placeholder="DD-MM-YYYY"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono"
                 />
               </div>
@@ -348,7 +366,8 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
                   required
                   min="0"
                   value={grossAmount}
-                  onChange={(e) => setGrossAmount(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setGrossAmount(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
                   className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-amber-400/50 rounded-lg text-xs font-mono font-bold text-slate-900 dark:text-white"
                 />
               </div>
@@ -362,7 +381,8 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
                   step="0.01"
                   min="0"
                   value={tdsTcs}
-                  onChange={(e) => setTdsTcs(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setTdsTcs(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono"
                 />
               </div>
@@ -376,7 +396,8 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
                   step="0.01"
                   min="0"
                   value={purchaseReturn}
-                  onChange={(e) => setPurchaseReturn(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setPurchaseReturn(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono"
                 />
               </div>
@@ -390,7 +411,8 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
                   step="0.01"
                   min="0"
                   value={promoClaims}
-                  onChange={(e) => setPromoClaims(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setPromoClaims(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono"
                 />
               </div>
@@ -404,7 +426,8 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
                   step="0.01"
                   min="0"
                   value={otherDebits}
-                  onChange={(e) => setOtherDebits(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setOtherDebits(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono"
                 />
               </div>
@@ -418,7 +441,8 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
                   step="0.01"
                   min="0"
                   value={otherAdjustments}
-                  onChange={(e) => setOtherAdjustments(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setOtherAdjustments(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono"
                 />
               </div>
@@ -452,23 +476,32 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
                   type="number"
                   step="0.01"
                   min="0"
-                  max={netPayable}
+                  max={netPayable || undefined}
                   value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold mb-1 text-emerald-700 dark:text-emerald-400 flex items-center justify-between">
-                  <span>Last Payment Date *</span>
-                  <span className="text-[10px] font-normal">Shows in PDF</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                    Last Payment Date
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setLastPaymentDate(getTodayFormatted())}
+                    className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline"
+                  >
+                    Set Today
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={lastPaymentDate}
                   onChange={(e) => setLastPaymentDate(e.target.value)}
-                  placeholder="e.g. 15-10-2026"
+                  placeholder="DD-MM-YYYY"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-emerald-500/50 rounded-lg text-xs font-mono font-semibold"
                 />
               </div>
@@ -490,7 +523,8 @@ export const AddInvoiceModal: React.FC<AddInvoiceModalProps> = ({
                   type="number"
                   min="0"
                   value={creditPeriod}
-                  onChange={(e) => setCreditPeriod(parseInt(e.target.value, 10) || 30)}
+                  onChange={(e) => setCreditPeriod(e.target.value === '' ? '' : parseInt(e.target.value, 10) || 0)}
+                  placeholder="0"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono"
                 />
               </div>
