@@ -1,5 +1,6 @@
 /**
  * Robust date formatting utility for Excel serial dates, JS Date objects, and various string formats
+ * Preserves the exact date as entered in Excel sheets
  */
 
 export function parseAndFormatDate(val: any): string {
@@ -10,6 +11,8 @@ export function parseAndFormatDate(val: any): string {
   // 1. JavaScript Date instance
   if (val instanceof Date) {
     if (isNaN(val.getTime())) return '';
+    // In SheetJS with cellDates: true, Excel timestamps can have small GMT offset.
+    // Use local getFullYear/Month/Date:
     const dd = String(val.getDate()).padStart(2, '0');
     const mm = String(val.getMonth() + 1).padStart(2, '0');
     const yyyy = val.getFullYear();
@@ -17,7 +20,7 @@ export function parseAndFormatDate(val: any): string {
   }
 
   // 2. Numeric Excel serial date (e.g. 45483 or 46214)
-  const num = typeof val === 'number' ? val : Number(String(val).trim());
+  const num = typeof val === 'number' ? val : (typeof val === 'string' && /^\d+(\.\d+)?$/.test(val.trim()) ? Number(val.trim()) : NaN);
   if (!isNaN(num) && num > 25000 && num < 80000) {
     // Excel epoch begins Jan 1 1900, with a leap year bug offset (25569 days to 1970)
     const date = new Date(Math.round((num - 25569) * 86400 * 1000));
@@ -32,9 +35,9 @@ export function parseAndFormatDate(val: any): string {
   const str = String(val).trim();
   if (!str) return '';
 
-  // 3. Already DD-MM-YYYY or DD/MM/YYYY
-  if (/^\d{1,2}[-\/]\d{1,2}[-\/]\d{4}$/.test(str)) {
-    const parts = str.split(/[-\/]/);
+  // 3. Already DD-MM-YYYY, DD/MM/YYYY, or DD.MM.YYYY
+  if (/^\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{4}$/.test(str)) {
+    const parts = str.split(/[-\/\.]/);
     return `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[2]}`;
   }
 
@@ -44,9 +47,9 @@ export function parseAndFormatDate(val: any): string {
     return `${parts[2]}-${parts[1]}-${parts[0]}`;
   }
 
-  // 5. YYYY/MM/DD
-  if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(str)) {
-    const parts = str.split('/');
+  // 5. YYYY/MM/DD or YYYY.MM.DD
+  if (/^\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2}$/.test(str)) {
+    const parts = str.split(/[-\/\.]/);
     return `${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}-${parts[0]}`;
   }
 
@@ -62,7 +65,7 @@ export function parseAndFormatDate(val: any): string {
     }
   }
 
-  // 7. General date parse fallback (e.g., "11 Jul 2026", "July 11, 2026")
+  // 7. General date parse fallback (e.g., "11 Jul 2026", "July 11, 2026", "11-Oct-26")
   const parsedTimestamp = Date.parse(str);
   if (!isNaN(parsedTimestamp)) {
     const d = new Date(parsedTimestamp);

@@ -10,17 +10,23 @@ import {
   ShieldCheck, 
   Copy,
   Calendar,
-  Clock
+  Clock,
+  CheckCircle2,
+  Edit3
 } from 'lucide-react';
 
 interface InvoiceDetailModalProps {
   invoice: InvoiceRecord | null;
   onClose: () => void;
+  onOpenMarkPaid?: (invoice: InvoiceRecord) => void;
+  onOpenEdit?: (invoice: InvoiceRecord) => void;
 }
 
 export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   invoice,
-  onClose
+  onClose,
+  onOpenMarkPaid,
+  onOpenEdit
 }) => {
   const [copied, setCopied] = React.useState(false);
 
@@ -303,16 +309,44 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 flex items-center justify-between text-xs">
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 flex flex-wrap items-center justify-between gap-3 text-xs">
           <span className="text-slate-500 dark:text-slate-400 font-mono">
             Net Payable: <strong className="text-slate-900 dark:text-white">{formatINR(invoice.netPayableAmount)}</strong>
           </span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium transition-colors"
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenEdit && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenEdit(invoice);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium transition-colors"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-blue-500" />
+                <span>Edit Invoice</span>
+              </button>
+            )}
+
+            {onOpenMarkPaid && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenMarkPaid(invoice);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition-colors shadow-xs"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{isPaid ? 'Edit Payment / UTR' : 'Mark as Paid'}</span>
+              </button>
+            )}
+
+            <button
+              onClick={onClose}
+              className="px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium transition-colors"
+            >
+              Close
+            </button>
+          </div>
         </div>
 
       </div>

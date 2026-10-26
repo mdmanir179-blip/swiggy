@@ -13,7 +13,10 @@ import {
   CheckCircle,
   HelpCircle,
   X,
-  Calendar
+  Calendar,
+  Edit3,
+  PlusCircle,
+  Check
 } from 'lucide-react';
 
 interface InvoiceTableProps {
@@ -22,6 +25,9 @@ interface InvoiceTableProps {
   selectedWarehouse?: string;
   onClearWarehouseFilter?: () => void;
   onOpenUpload?: () => void;
+  onOpenAddInvoice?: () => void;
+  onMarkPaid?: (invoice: InvoiceRecord) => void;
+  onEditInvoice?: (invoice: InvoiceRecord) => void;
 }
 
 type SortField = 
@@ -42,7 +48,10 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
   onSelectInvoice,
   selectedWarehouse,
   onClearWarehouseFilter,
-  onOpenUpload
+  onOpenUpload,
+  onOpenAddInvoice,
+  onMarkPaid,
+  onEditInvoice
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -242,6 +251,17 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
             <SlidersHorizontal className="w-3.5 h-3.5" />
             <span>{showAllColumns ? 'Compact' : 'All 34 Fields'}</span>
           </button>
+
+          {onOpenAddInvoice && (
+            <button
+              onClick={onOpenAddInvoice}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors whitespace-nowrap"
+              title="Add a new invoice manually"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>+ Add Invoice</span>
+            </button>
+          )}
         </div>
 
       </div>
@@ -408,13 +428,26 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                         ? 'Upload an Excel or CSV report to start analyzing' 
                         : 'Try searching by a different invoice number, warehouse, date, vendor, or UTR.'}
                     </p>
-                    {invoices.length === 0 && onOpenUpload && (
-                      <button
-                        onClick={onOpenUpload}
-                        className="mt-2 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold rounded-lg text-xs"
-                      >
-                        Upload Excel / CSV
-                      </button>
+                    {invoices.length === 0 && (
+                      <div className="flex items-center gap-2 mt-3">
+                        {onOpenUpload && (
+                          <button
+                            onClick={onOpenUpload}
+                            className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold rounded-lg text-xs transition-colors"
+                          >
+                            Upload Excel / CSV
+                          </button>
+                        )}
+                        {onOpenAddInvoice && (
+                          <button
+                            onClick={onOpenAddInvoice}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-xs"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            <span>+ Add Invoice Manually</span>
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </td>
@@ -587,17 +620,50 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                     </td>
 
                     {/* Action */}
-                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectInvoice(inv);
-                        }}
-                        className="p-1 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
-                        title="View Detailed Invoice Breakdown"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </button>
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {onMarkPaid && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onMarkPaid(inv);
+                            }}
+                            className={`px-2 py-1 text-[11px] font-semibold rounded transition-colors flex items-center gap-1 shadow-xs ${
+                              isPaid
+                                ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950/70 dark:hover:bg-emerald-900 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            }`}
+                            title={isPaid ? 'Edit payment status / UTR / Date' : 'Mark this invoice as Paid'}
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>{isPaid ? 'Paid' : 'Mark Paid'}</span>
+                          </button>
+                        )}
+
+                        {onEditInvoice && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditInvoice(inv);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                            title="Edit Invoice Details"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectInvoice(inv);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                          title="View Detailed Invoice Breakdown"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
 
                   </tr>

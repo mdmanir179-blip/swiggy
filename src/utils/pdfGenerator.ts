@@ -202,6 +202,29 @@ export function generateInvoiceReportPDF(
     alternateRowStyles: {
       fillColor: [248, 250, 252],
     },
+    didParseCell: (data) => {
+      if (data.section === 'body') {
+        // Status column
+        if (data.column.index === 11) {
+          const val = String(data.cell.raw || '').toLowerCase();
+          if (val === 'paid' || val.includes('paid') && !val.includes('unpaid') && !val.includes('part')) {
+            data.cell.styles.textColor = [5, 150, 105];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (val.includes('unpaid')) {
+            data.cell.styles.textColor = [220, 38, 38];
+          } else if (val.includes('part')) {
+            data.cell.styles.textColor = [217, 119, 6];
+          }
+        }
+        // Balance column: if 0.00, make light grey
+        if (data.column.index === 8) {
+          const val = String(data.cell.raw || '').trim();
+          if (val === '0.00' || val === '0') {
+            data.cell.styles.textColor = [100, 116, 139];
+          }
+        }
+      }
+    },
     margin: { left: 40, right: 40 },
     didDrawPage: () => {
       // Footer page numbering

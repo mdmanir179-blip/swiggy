@@ -13,7 +13,8 @@ import {
   Trash2,
   Share2,
   Maximize2,
-  Minimize2
+  Minimize2,
+  PlusCircle
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import { InstamartLogo } from './InstamartLogo';
@@ -22,6 +23,7 @@ interface HeaderProps {
   currentTab: ViewTab;
   onTabChange: (tab: ViewTab) => void;
   onOpenUpload: () => void;
+  onOpenAddInvoice: () => void;
   onOpenExport: () => void;
   onOpenShare: () => void;
   onClearData: () => void;
@@ -36,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   currentTab,
   onTabChange,
   onOpenUpload,
+  onOpenAddInvoice,
   onOpenExport,
   onOpenShare,
   onClearData,
@@ -204,6 +207,16 @@ export const Header: React.FC<HeaderProps> = ({
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
+
+            {/* Add Invoice Manual Button */}
+            <button
+              onClick={onOpenAddInvoice}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-200 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 rounded-lg transition-colors whitespace-nowrap shadow-xs"
+              title="Manually enter or create a new invoice"
+            >
+              <PlusCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>+ Add Invoice</span>
+            </button>
 
             {/* Upload Button */}
             <button

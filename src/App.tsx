@@ -3,6 +3,13 @@ import { ViewTab, InvoiceRecord, PaymentRecord } from './types';
 import { deriveInitialPayments } from './data/initialData';
 import { calculateFinancialSummary } from './utils/summaryCalculator';
 import { loadSharedDatasetFromUrl } from './utils/shareManager';
+import { 
+  saveInvoicesToStorage, 
+  loadInvoicesFromStorage, 
+  savePaymentsToStorage, 
+  loadPaymentsFromStorage,
+  clearAllPersistentStorage 
+} from './utils/storage';
 import { Header } from './components/Header';
 import { MetricCards } from './components/MetricCards';
 import { AnalyticsCharts } from './components/AnalyticsCharts';
@@ -18,6 +25,8 @@ import { ClearDataModal } from './components/ClearDataModal';
 import { PrintStatement } from './components/PrintStatement';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { InstamartLogo } from './components/InstamartLogo';
+import { MarkAsPaidModal } from './components/MarkAsPaidModal';
+import { AddInvoiceModal } from './components/AddInvoiceModal';
 import { 
   Upload, 
   FileSpreadsheet, 
@@ -27,19 +36,16 @@ import {
   Info, 
   Check, 
   Sparkles,
-  X
+  X,
+  PlusCircle
 } from 'lucide-react';
 
 export default function App() {
+  // Synchronous immediate memory read with IndexedDB hydration
   const [invoices, setInvoices] = useState<InvoiceRecord[]>(() => {
     try {
-      const saved = localStorage.getItem('instamart_invoices');
+      const saved = localStorage.getItem('instamart_invoices_data') || localStorage.getItem('instamart_invoices');
       if (saved) {
-        if (saved.includes('TBC/26-27/831') || saved.includes('VIAPO74796') || saved.includes('1N96368405')) {
-          localStorage.removeItem('instamart_invoices');
-          localStorage.removeItem('instamart_payments');
-          return [];
-        }
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
@@ -51,12 +57,8 @@ export default function App() {
 
   const [payments, setPayments] = useState<PaymentRecord[]>(() => {
     try {
-      const saved = localStorage.getItem('instamart_payments');
+      const saved = localStorage.getItem('instamart_payments_data') || localStorage.getItem('instamart_payments');
       if (saved) {
-        if (saved.includes('1N96368405') || saved.includes('HSBCN52026')) {
-          localStorage.removeItem('instamart_payments');
-          return [];
-        }
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
@@ -65,6 +67,32 @@ export default function App() {
     }
     return [];
   });
+
+  const [isStorageLoaded, setIsStorageLoaded] = useState(false);
+
+  // Hydrate from IndexedDB on startup (overcomes 5MB localStorage limit & prevents data loss)
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const storedInvoices = await loadInvoicesFromStorage();
+        const storedPayments = await loadPaymentsFromStorage();
+        if (isMounted) {
+          if (storedInvoices.length > 0) {
+            setInvoices(storedInvoices);
+          }
+          if (storedPayments.length > 0) {
+            setPayments(storedPayments);
+          }
+          setIsStorageLoaded(true);
+        }
+      } catch (err) {
+        console.warn('Persistent storage hydration failed:', err);
+        if (isMounted) setIsStorageLoaded(true);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, []);
 
   // Shared dataset notice from URL link
   const [sharedNotice, setSharedNotice] = useState<{
@@ -102,30 +130,16 @@ export default function App() {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  // Sync state to localStorage
+  // Sync state to persistent storage (IndexedDB + localStorage)
   useEffect(() => {
-    try {
-      if (invoices.length > 0) {
-        localStorage.setItem('instamart_invoices', JSON.stringify(invoices));
-      } else {
-        localStorage.removeItem('instamart_invoices');
-      }
-    } catch {
-      // ignore
-    }
-  }, [invoices]);
+    if (!isStorageLoaded && invoices.length === 0) return;
+    saveInvoicesToStorage(invoices).catch(err => console.warn('Save invoices failed:', err));
+  }, [invoices, isStorageLoaded]);
 
   useEffect(() => {
-    try {
-      if (payments.length > 0) {
-        localStorage.setItem('instamart_payments', JSON.stringify(payments));
-      } else {
-        localStorage.removeItem('instamart_payments');
-      }
-    } catch {
-      // ignore
-    }
-  }, [payments]);
+    if (!isStorageLoaded && payments.length === 0) return;
+    savePaymentsToStorage(payments).catch(err => console.warn('Save payments failed:', err));
+  }, [payments, isStorageLoaded]);
 
   // Check URL on startup for shared dataset link (?share=... or #data=...)
   useEffect(() => {
@@ -162,6 +176,14 @@ export default function App() {
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isClearDataOpen, setIsClearDataOpen] = useState(false);
 
+  // Mark As Paid Modal state
+  const [isMarkPaidOpen, setIsMarkPaidOpen] = useState(false);
+  const [invoiceToMarkPaid, setInvoiceToMarkPaid] = useState<InvoiceRecord | null>(null);
+
+  // Manual Add/Edit Invoice Modal state
+  const [isAddInvoiceOpen, setIsAddInvoiceOpen] = useState(false);
+  const [invoiceToEdit, setInvoiceToEdit] = useState<InvoiceRecord | null>(null);
+
   // Financial summary computation
   const summary = useMemo(() => {
     return calculateFinancialSummary(invoices);
@@ -174,11 +196,22 @@ export default function App() {
   const handleInvoicesLoaded = (newInvoices: InvoiceRecord[], mode: 'replace' | 'append') => {
     if (mode === 'replace') {
       setInvoices(newInvoices);
-      setPayments(deriveInitialPayments(newInvoices));
+      const derived = deriveInitialPayments(newInvoices);
+      setPayments(derived);
+      saveInvoicesToStorage(newInvoices);
+      savePaymentsToStorage(derived);
     } else {
-      setInvoices(prev => [...prev, ...newInvoices]);
+      setInvoices(prev => {
+        const merged = [...prev, ...newInvoices];
+        saveInvoicesToStorage(merged);
+        return merged;
+      });
       const newDerived = deriveInitialPayments(newInvoices);
-      setPayments(prev => [...prev, ...newDerived]);
+      setPayments(prev => {
+        const merged = [...prev, ...newDerived];
+        savePaymentsToStorage(merged);
+        return merged;
+      });
     }
     setSharedNotice(null);
   };
@@ -187,27 +220,184 @@ export default function App() {
   const handlePaymentsLoaded = (newPayments: PaymentRecord[], mode: 'replace' | 'append') => {
     if (mode === 'replace') {
       setPayments(newPayments);
+      savePaymentsToStorage(newPayments);
     } else {
-      setPayments(prev => [...prev, ...newPayments]);
+      setPayments(prev => {
+        const merged = [...prev, ...newPayments];
+        savePaymentsToStorage(merged);
+        return merged;
+      });
     }
   };
 
+  // Open Mark As Paid modal
+  const handleOpenMarkPaid = (invoice: InvoiceRecord) => {
+    setInvoiceToMarkPaid(invoice);
+    setIsMarkPaidOpen(true);
+  };
+
+  // Open Manual Add or Edit invoice modal
+  const handleOpenAddInvoice = (invoice?: InvoiceRecord) => {
+    setInvoiceToEdit(invoice || null);
+    setIsAddInvoiceOpen(true);
+  };
+
+  // Confirm payment handler
+  const handleConfirmPayment = (
+    invoiceId: string, 
+    paidAmount: number, 
+    paymentDate: string, 
+    paymentRef: string, 
+    paymentType: string
+  ) => {
+    setInvoices(prev => prev.map(inv => {
+      if (inv.id !== invoiceId) return inv;
+      const outstanding = Math.max(0, inv.netPayableAmount - paidAmount);
+      const isFullPaid = outstanding <= 0.01;
+      const paymentStatus = isFullPaid ? 'Paid' : (paidAmount > 0 ? 'Partially Paid' : 'Unpaid');
+      return {
+        ...inv,
+        paymentAmount: paidAmount,
+        outstandingPayment: outstanding,
+        paymentStatus,
+        lastPaymentDate: paymentDate,
+        paymentReferenceNo: paymentRef,
+        statusOfInvoice: isFullPaid ? 'Paid' : inv.statusOfInvoice
+      };
+    }));
+
+    // Also update payments ledger
+    setPayments(prev => {
+      const invNum = invoiceToMarkPaid?.invoiceNumber || '';
+      const existingIdx = prev.findIndex(p => (invNum && p.linkedInvoices?.includes(invNum)) || (paymentRef && p.paymentReferenceNo === paymentRef));
+      if (existingIdx >= 0) {
+        const copy = [...prev];
+        const existing = copy[existingIdx];
+        copy[existingIdx] = {
+          ...existing,
+          amount: paidAmount,
+          netAmount: paidAmount,
+          paymentDate: paymentDate,
+          paymentReferenceNo: paymentRef,
+          paymentType: paymentType || existing.paymentType,
+          linkedInvoices: invNum && !existing.linkedInvoices?.includes(invNum) 
+            ? [...(existing.linkedInvoices || []), invNum] 
+            : existing.linkedInvoices
+        };
+        return copy;
+      } else if (invoiceToMarkPaid && paidAmount > 0) {
+        const newPay: PaymentRecord = {
+          id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          organizationName: invoiceToMarkPaid.organizationName || 'Instamart Retail',
+          vendorName: invoiceToMarkPaid.vendorName,
+          vendorCode: invoiceToMarkPaid.vendorCode,
+          gstin: invoiceToMarkPaid.gstin || '',
+          pan: invoiceToMarkPaid.pan || '',
+          tradeVendorType: 'Goods / Grocery Supplier',
+          paymentType: paymentType || 'NEFT',
+          paymentDate: paymentDate,
+          paymentNumber: paymentRef || `PMT-${Date.now().toString().slice(-6)}`,
+          paymentReferenceNo: paymentRef,
+          amount: paidAmount,
+          reversal: 0,
+          netAmount: paidAmount,
+          linkedInvoices: [invoiceToMarkPaid.invoiceNumber],
+          matchedInvoiceCount: 1
+        };
+        return [newPay, ...prev];
+      }
+      return prev;
+    });
+
+    setIsMarkPaidOpen(false);
+    setInvoiceToMarkPaid(null);
+  };
+
+  // Revert payment back to unpaid
+  const handleRevertToUnpaid = (invoiceId: string) => {
+    setInvoices(prev => prev.map(inv => {
+      if (inv.id !== invoiceId) return inv;
+      return {
+        ...inv,
+        paymentAmount: 0,
+        outstandingPayment: inv.netPayableAmount,
+        paymentStatus: 'Unpaid',
+        lastPaymentDate: '',
+        paymentReferenceNo: '',
+        statusOfInvoice: 'Approved'
+      };
+    }));
+    setIsMarkPaidOpen(false);
+    setInvoiceToMarkPaid(null);
+  };
+
+  // Save manual or edited invoice
+  const handleSaveManualInvoice = (invoice: InvoiceRecord) => {
+    setInvoices(prev => {
+      const idx = prev.findIndex(i => i.id === invoice.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = invoice;
+        return copy;
+      } else {
+        return [invoice, ...prev];
+      }
+    });
+
+    if (invoice.paymentAmount > 0) {
+      setPayments(prev => {
+        const invNum = invoice.invoiceNumber;
+        const idx = prev.findIndex(p => p.linkedInvoices?.includes(invNum) || (invoice.paymentReferenceNo && p.paymentReferenceNo === invoice.paymentReferenceNo));
+        if (idx >= 0) {
+          const copy = [...prev];
+          const existing = copy[idx];
+          copy[idx] = {
+            ...existing,
+            amount: invoice.paymentAmount,
+            netAmount: invoice.paymentAmount,
+            paymentDate: invoice.lastPaymentDate || existing.paymentDate,
+            paymentReferenceNo: invoice.paymentReferenceNo || existing.paymentReferenceNo
+          };
+          return copy;
+        } else {
+          const newPay: PaymentRecord = {
+            id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            organizationName: invoice.organizationName || 'Instamart Retail',
+            vendorName: invoice.vendorName,
+            vendorCode: invoice.vendorCode,
+            gstin: invoice.gstin || '',
+            pan: invoice.pan || '',
+            tradeVendorType: 'Goods / Grocery Supplier',
+            paymentType: 'NEFT',
+            paymentDate: invoice.lastPaymentDate || invoice.invoiceAccountingDate,
+            paymentNumber: invoice.paymentReferenceNo || `PMT-${Date.now().toString().slice(-6)}`,
+            paymentReferenceNo: invoice.paymentReferenceNo || '',
+            amount: invoice.paymentAmount,
+            reversal: 0,
+            netAmount: invoice.paymentAmount,
+            linkedInvoices: [invoice.invoiceNumber],
+            matchedInvoiceCount: 1
+          };
+          return [newPay, ...prev];
+        }
+      });
+    }
+
+    setIsAddInvoiceOpen(false);
+    setInvoiceToEdit(null);
+  };
+
   // Clear all data directly from in-app modal
-  const handleConfirmClear = () => {
+  const handleConfirmClear = async () => {
     setInvoices([]);
     setPayments([]);
     setSelectedWarehouse(undefined);
     setSelectedInvoice(null);
     setCurrentTab('dashboard');
     setSharedNotice(null);
-    try {
-      localStorage.removeItem('instamart_invoices');
-      localStorage.removeItem('instamart_payments');
-      if (window.history.replaceState) {
-        window.history.replaceState(null, '', window.location.pathname);
-      }
-    } catch {
-      // ignore
+    await clearAllPersistentStorage();
+    if (window.history.replaceState) {
+      window.history.replaceState(null, '', window.location.pathname);
     }
   };
 
@@ -247,6 +437,7 @@ export default function App() {
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         onOpenUpload={() => setIsUploadOpen(true)}
+        onOpenAddInvoice={() => handleOpenAddInvoice()}
         onOpenExport={() => setIsExportOpen(true)}
         onOpenShare={() => setIsShareOpen(true)}
         onClearData={() => setIsClearDataOpen(true)}
@@ -334,6 +525,13 @@ export default function App() {
                 <Upload className="w-4 h-4" />
                 <span>Upload Excel / CSV Report</span>
               </button>
+              <button
+                onClick={() => handleOpenAddInvoice()}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm shadow-md transition-colors"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>+ Add Invoice Manually</span>
+              </button>
             </div>
 
             {/* Feature highlights */}
@@ -410,6 +608,9 @@ export default function App() {
                     selectedWarehouse={selectedWarehouse}
                     onClearWarehouseFilter={() => setSelectedWarehouse(undefined)}
                     onOpenUpload={() => setIsUploadOpen(true)}
+                    onOpenAddInvoice={() => handleOpenAddInvoice()}
+                    onMarkPaid={handleOpenMarkPaid}
+                    onEditInvoice={(inv) => handleOpenAddInvoice(inv)}
                   />
                 </div>
               </div>
@@ -440,6 +641,9 @@ export default function App() {
                   selectedWarehouse={selectedWarehouse}
                   onClearWarehouseFilter={() => setSelectedWarehouse(undefined)}
                   onOpenUpload={() => setIsUploadOpen(true)}
+                  onOpenAddInvoice={() => handleOpenAddInvoice()}
+                  onMarkPaid={handleOpenMarkPaid}
+                  onEditInvoice={(inv) => handleOpenAddInvoice(inv)}
                 />
               </div>
             )}
@@ -499,6 +703,32 @@ export default function App() {
       <InvoiceDetailModal
         invoice={selectedInvoice}
         onClose={() => setSelectedInvoice(null)}
+        onOpenMarkPaid={handleOpenMarkPaid}
+        onOpenEdit={(inv) => handleOpenAddInvoice(inv)}
+      />
+
+      {/* Mark As Paid Modal */}
+      <MarkAsPaidModal
+        isOpen={isMarkPaidOpen}
+        invoice={invoiceToMarkPaid}
+        onClose={() => {
+          setIsMarkPaidOpen(false);
+          setInvoiceToMarkPaid(null);
+        }}
+        onConfirmPayment={handleConfirmPayment}
+        onRevertToUnpaid={handleRevertToUnpaid}
+      />
+
+      {/* Manual Add / Edit Invoice Modal */}
+      <AddInvoiceModal
+        isOpen={isAddInvoiceOpen}
+        onClose={() => {
+          setIsAddInvoiceOpen(false);
+          setInvoiceToEdit(null);
+        }}
+        onSaveInvoice={handleSaveManualInvoice}
+        initialInvoice={invoiceToEdit}
+        defaultVendorName={vendorName || undefined}
       />
 
       {/* Excel & CSV Upload Modal */}
