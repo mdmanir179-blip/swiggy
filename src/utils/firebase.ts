@@ -21,62 +21,142 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 // Initialize Auth
 export const auth = getAuth(app);
 
-// Automatically sign in anonymously to satisfy request.auth in Firestore rules
-let isAuthInit = false;
-export async function ensureAuth() {
-  if (isAuthInit) return;
+// Gracefully attempt anonymous authentication if enabled (does not crash if not configured)
+let isAuthAttempted = false;
+export async function ensureAuth(): Promise<void> {
+  if (isAuthAttempted) return;
+  isAuthAttempted = true;
   try {
     if (!auth.currentUser) {
       await signInAnonymously(auth);
     }
-    isAuthInit = true;
   } catch (err) {
-    console.warn('Anonymous sign-in warning:', err);
+    // Non-blocking: firestore.rules allows unauthenticated reads and writes
+    console.info('Firebase auth initialization info:', err);
   }
 }
-ensureAuth();
+ensureAuth().catch(() => {});
 
 // Initialize Firestore with the provisioned custom database ID
 export const db = firebaseConfig.firestoreDatabaseId 
   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
   : getFirestore(app);
 
-// Validate connection
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'workspace', 'ping'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore is running in offline client mode.');
-    }
-  }
-}
-testConnection();
-
-const INVOICES_COLLECTION = 'invoices';
-const PAYMENTS_COLLECTION = 'payments';
-const WORKSPACE_COLLECTION = 'workspace';
-const ACTIVE_WORKSPACE_DOC = 'active_ledger';
+// Collections
+export const INVOICES_COLLECTION = 'invoices';
+export const PAYMENTS_COLLECTION = 'payments';
+export const WORKSPACE_COLLECTION = 'workspace';
+export const ACTIVE_WORKSPACE_DOC = 'active_ledger';
 
 /**
- * Save all invoices to Firestore (both batch collection and fast snapshot for cross-device sync)
+ * Deep sanitizer to ensure NO field is ever `undefined` (which causes Firestore setDoc/batch to throw errors)
  */
-export async function saveInvoicesToCloud(invoices: InvoiceRecord[], vendorName?: string): Promise<void> {
-  await ensureAuth();
-  try {
-    // 1. Fast snapshot update in active_ledger document (instant cross-device sync)
-    const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
-    await setDoc(activeDocRef, {
-      invoices,
-      vendorName: vendorName || invoices[0]?.vendorName || '',
-      totalInvoices: invoices.length,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+export function sanitizeInvoice(inv: Partial<InvoiceRecord>, index = 0): InvoiceRecord {
+  const invoiceNum = String(inv.invoiceNumber || `INV-${index + 1}`).trim();
+  const rawId = inv.id || `inv_${Date.now()}_${index}_${invoiceNum.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  const safeId = String(rawId).replace(/\//g, '_');
 
-    // 2. Also write individual records in batches of 400 for granular querying
-    const BATCH_SIZE = 400;
-    for (let i = 0; i < invoices.length; i += BATCH_SIZE) {
-      const chunk = invoices.slice(i, i + BATCH_SIZE);
+  return {
+    id: safeId,
+    organizationName: String(inv.organizationName || 'SCOOTSY LOGISTICS PRIVATE LIMITED'),
+    vendorName: String(inv.vendorName || ''),
+    vendorCode: String(inv.vendorCode || ''),
+    gstin: String(inv.gstin || ''),
+    pan: String(inv.pan || ''),
+    warehouseName: String(inv.warehouseName || 'General Warehouse'),
+    city: String(inv.city || ''),
+    state: String(inv.state || 'India'),
+    statusOfInvoice: String(inv.statusOfInvoice || 'Posted'),
+    poNumber: String(inv.poNumber || ''),
+    poDate: String(inv.poDate || ''),
+    poAmount: Number(inv.poAmount) || 0,
+    grnNumber: String(inv.grnNumber || ''),
+    grnDate: String(inv.grnDate || ''),
+    grossGrnAmount: Number(inv.grossGrnAmount) || 0,
+    invoiceNumber: invoiceNum,
+    invoiceAccountingDate: String(inv.invoiceAccountingDate || ''),
+    invoicesRecorded: Number(inv.invoicesRecorded) || 0,
+    tdsTcs: Number(inv.tdsTcs) || 0,
+    purchaseReturnAmount: Number(inv.purchaseReturnAmount) || 0,
+    brandDiscountPromoClaims: Number(inv.brandDiscountPromoClaims) || 0,
+    otherDebitAmount: Number(inv.otherDebitAmount) || 0,
+    otherAdjustments: Number(inv.otherAdjustments) || 0,
+    netPayableAmount: Number(inv.netPayableAmount) || 0,
+    otherAdjustmentDate: String(inv.otherAdjustmentDate || ''),
+    invoiceStatus: String(inv.invoiceStatus || 'Reconciled'),
+    paymentAmount: Number(inv.paymentAmount) || 0,
+    paymentReferenceNo: String(inv.paymentReferenceNo || ''),
+    outstandingPayment: Number(inv.outstandingPayment) || 0,
+    dueDate: String(inv.dueDate || ''),
+    creditPeriod: Number(inv.creditPeriod) || 30,
+    overdueStatus: String(inv.overdueStatus || 'Not Due'),
+    paymentStatus: String(inv.paymentStatus || 'Unpaid'),
+    lastPaymentDate: String(inv.lastPaymentDate || ''),
+    totalDeductions: Number(inv.totalDeductions) || 0,
+    daysUntilDue: inv.daysUntilDue !== undefined ? Number(inv.daysUntilDue) : 0,
+    agingBucket: (inv.agingBucket as any) || 'Not Due'
+  };
+}
+
+export function sanitizePayment(pmt: Partial<PaymentRecord>, index = 0): PaymentRecord {
+  const pmtNum = String(pmt.paymentNumber || `PMT-${index + 1}`).trim();
+  const rawId = pmt.id || `pay_${Date.now()}_${index}_${pmtNum.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  const safeId = String(rawId).replace(/\//g, '_');
+
+  return {
+    id: safeId,
+    organizationName: String(pmt.organizationName || 'SCOOTSY LOGISTICS PRIVATE LIMITED'),
+    vendorName: String(pmt.vendorName || ''),
+    vendorCode: String(pmt.vendorCode || ''),
+    gstin: String(pmt.gstin || ''),
+    pan: String(pmt.pan || ''),
+    tradeVendorType: String(pmt.tradeVendorType || 'Trade'),
+    paymentType: String(pmt.paymentType || 'NEFT'),
+    paymentDate: String(pmt.paymentDate || ''),
+    paymentNumber: pmtNum,
+    paymentReferenceNo: String(pmt.paymentReferenceNo || ''),
+    amount: Number(pmt.amount) || 0,
+    reversal: Number(pmt.reversal) || 0,
+    netAmount: Number(pmt.netAmount) || 0,
+    linkedInvoices: Array.isArray(pmt.linkedInvoices) ? pmt.linkedInvoices.filter(Boolean).map(String) : [],
+    matchedInvoiceCount: Number(pmt.matchedInvoiceCount) || 0
+  };
+}
+
+/**
+ * Save all invoices to Firestore Cloud Database
+ * Syncs both the collection documents (/invoices/{id}) and the active_ledger workspace doc
+ */
+export async function saveInvoicesToCloud(
+  invoices: InvoiceRecord[], 
+  vendorName?: string
+): Promise<{ success: boolean; count: number }> {
+  await ensureAuth();
+
+  const sanitized = invoices.map((inv, idx) => sanitizeInvoice(inv, idx));
+  const primaryVendor = vendorName || sanitized[0]?.vendorName || '';
+
+  try {
+    // 1. Write to active_ledger metadata doc
+    const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
+    
+    // If under 150 invoices, also store array in active_ledger for instant single-document fetch
+    const payload: Record<string, any> = {
+      totalInvoices: sanitized.length,
+      vendorName: primaryVendor,
+      updatedAt: new Date().toISOString(),
+      version: Date.now()
+    };
+    if (sanitized.length <= 150) {
+      payload.invoices = sanitized;
+    }
+
+    await setDoc(activeDocRef, payload, { merge: true });
+
+    // 2. Batch write all invoices into collection /invoices in chunks of 200
+    const BATCH_SIZE = 200;
+    for (let i = 0; i < sanitized.length; i += BATCH_SIZE) {
+      const chunk = sanitized.slice(i, i + BATCH_SIZE);
       const batch = writeBatch(db);
       for (const inv of chunk) {
         const ref = doc(db, INVOICES_COLLECTION, inv.id);
@@ -84,28 +164,38 @@ export async function saveInvoicesToCloud(invoices: InvoiceRecord[], vendorName?
       }
       await batch.commit();
     }
+
+    console.log(`[Cloud Sync] Successfully persisted ${sanitized.length} invoices to Firestore.`);
+    return { success: true, count: sanitized.length };
   } catch (err) {
-    console.error('Failed to sync invoices to Firestore:', err);
+    console.error('[Cloud Sync] Failed to save invoices to Firestore:', err);
     throw err;
   }
 }
 
 /**
- * Save all payments to Firestore
+ * Save all payments to Firestore Cloud Database
  */
-export async function savePaymentsToCloud(payments: PaymentRecord[]): Promise<void> {
+export async function savePaymentsToCloud(payments: PaymentRecord[]): Promise<{ success: boolean; count: number }> {
   await ensureAuth();
+
+  const sanitized = payments.map((p, idx) => sanitizePayment(p, idx));
+
   try {
     const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
-    await setDoc(activeDocRef, {
-      payments,
-      totalPayments: payments.length,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    const payload: Record<string, any> = {
+      totalPayments: sanitized.length,
+      updatedAt: new Date().toISOString(),
+      version: Date.now()
+    };
+    if (sanitized.length <= 150) {
+      payload.payments = sanitized;
+    }
+    await setDoc(activeDocRef, payload, { merge: true });
 
-    const BATCH_SIZE = 400;
-    for (let i = 0; i < payments.length; i += BATCH_SIZE) {
-      const chunk = payments.slice(i, i + BATCH_SIZE);
+    const BATCH_SIZE = 200;
+    for (let i = 0; i < sanitized.length; i += BATCH_SIZE) {
+      const chunk = sanitized.slice(i, i + BATCH_SIZE);
       const batch = writeBatch(db);
       for (const pmt of chunk) {
         const ref = doc(db, PAYMENTS_COLLECTION, pmt.id);
@@ -113,100 +203,155 @@ export async function savePaymentsToCloud(payments: PaymentRecord[]): Promise<vo
       }
       await batch.commit();
     }
+
+    console.log(`[Cloud Sync] Successfully persisted ${sanitized.length} payments to Firestore.`);
+    return { success: true, count: sanitized.length };
   } catch (err) {
-    console.error('Failed to sync payments to Firestore:', err);
+    console.error('[Cloud Sync] Failed to save payments to Firestore:', err);
     throw err;
   }
 }
 
 /**
- * Update a single invoice in cloud (e.g. Mark as Paid or Edit)
+ * Update or insert a single invoice in Firestore (used for Mark As Paid, Manual Add, or Edit)
  */
 export async function updateSingleInvoiceInCloud(invoice: InvoiceRecord): Promise<void> {
   await ensureAuth();
+  const sanitized = sanitizeInvoice(invoice);
   try {
-    const ref = doc(db, INVOICES_COLLECTION, invoice.id);
-    await setDoc(ref, { ...invoice, updatedAt: new Date().toISOString() }, { merge: true });
+    const ref = doc(db, INVOICES_COLLECTION, sanitized.id);
+    await setDoc(ref, { ...sanitized, updatedAt: new Date().toISOString() }, { merge: true });
 
-    // Also update snapshot document if present
+    // Touch active_ledger so other devices immediately detect change
     const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
-    const snap = await getDoc(activeDocRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      const currentInvoices: InvoiceRecord[] = data.invoices || [];
-      const updated = currentInvoices.map(i => i.id === invoice.id ? invoice : i);
-      await setDoc(activeDocRef, { invoices: updated, updatedAt: new Date().toISOString() }, { merge: true });
-    }
+    await setDoc(activeDocRef, {
+      updatedAt: new Date().toISOString(),
+      version: Date.now()
+    }, { merge: true });
+
+    console.log(`[Cloud Sync] Updated invoice ${sanitized.invoiceNumber} in Firestore.`);
   } catch (err) {
-    console.warn('Failed to update single invoice in cloud:', err);
+    console.warn('[Cloud Sync] Error updating single invoice in cloud:', err);
   }
 }
 
 /**
- * Load initial dataset from cloud (used when opening on any new device or Vercel)
+ * Load complete dataset from Cloud Firestore
+ * This is called on startup from any device (Desktop, Laptop, Phone, or Vercel URL)
  */
-export async function loadDatasetFromCloud(): Promise<{ invoices: InvoiceRecord[]; payments: PaymentRecord[]; vendorName?: string } | null> {
+export async function loadDatasetFromCloud(): Promise<{
+  invoices: InvoiceRecord[];
+  payments: PaymentRecord[];
+  vendorName?: string;
+  lastUpdated?: string;
+} | null> {
   await ensureAuth();
   try {
-    const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
-    const snap = await getDoc(activeDocRef);
-    
-    if (snap.exists()) {
-      const data = snap.data();
-      const invoices: InvoiceRecord[] = data.invoices || [];
-      const payments: PaymentRecord[] = data.payments || [];
-      if (invoices.length > 0 || payments.length > 0) {
-        return {
-          invoices,
-          payments,
-          vendorName: data.vendorName
-        };
-      }
-    }
+    // 1. First check if documents exist in the dedicated collections
+    const [invSnap, pmtSnap, activeDocSnap] = await Promise.all([
+      getDocs(collection(db, INVOICES_COLLECTION)),
+      getDocs(collection(db, PAYMENTS_COLLECTION)),
+      getDoc(doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC))
+    ]);
 
-    // Fallback: check individual collections
-    const invSnap = await getDocs(collection(db, INVOICES_COLLECTION));
-    const pmtSnap = await getDocs(collection(db, PAYMENTS_COLLECTION));
     const invoices: InvoiceRecord[] = [];
     const payments: PaymentRecord[] = [];
 
-    invSnap.forEach(d => invoices.push(d.data() as InvoiceRecord));
-    pmtSnap.forEach(d => payments.push(d.data() as PaymentRecord));
+    invSnap.forEach(d => {
+      invoices.push(sanitizeInvoice(d.data() as any));
+    });
+
+    pmtSnap.forEach(d => {
+      payments.push(sanitizePayment(d.data() as any));
+    });
+
+    let vendorName: string | undefined = undefined;
+    let lastUpdated: string | undefined = undefined;
+
+    if (activeDocSnap.exists()) {
+      const activeData = activeDocSnap.data();
+      vendorName = activeData.vendorName;
+      lastUpdated = activeData.updatedAt || activeData.lastUpdated;
+
+      // Fallback: if collection was empty but active_ledger had array
+      if (invoices.length === 0 && Array.isArray(activeData.invoices) && activeData.invoices.length > 0) {
+        invoices.push(...activeData.invoices.map((inv: any, idx: number) => sanitizeInvoice(inv, idx)));
+      }
+      if (payments.length === 0 && Array.isArray(activeData.payments) && activeData.payments.length > 0) {
+        payments.push(...activeData.payments.map((p: any, idx: number) => sanitizePayment(p, idx)));
+      }
+    }
 
     if (invoices.length > 0 || payments.length > 0) {
-      return { invoices, payments };
+      console.log(`[Cloud Sync] Loaded ${invoices.length} invoices and ${payments.length} payments from Firestore.`);
+      return {
+        invoices,
+        payments,
+        vendorName: vendorName || invoices[0]?.vendorName || '',
+        lastUpdated
+      };
     }
   } catch (err) {
-    console.warn('Error loading dataset from Firestore cloud:', err);
+    console.warn('[Cloud Sync] Could not fetch dataset from Firestore:', err);
   }
   return null;
 }
 
 /**
- * Real-time subscription to cloud dataset across all devices
+ * Real-time listener for multi-device sync
+ * When user uploads, edits, marks as paid, or adds invoices on Device A,
+ * Device B's onSnapshot triggers immediately and updates its UI!
  */
 export function subscribeToCloudLedger(
   onUpdate: (data: { invoices: InvoiceRecord[]; payments: PaymentRecord[]; vendorName?: string }) => void
 ): () => void {
   const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
-  return onSnapshot(activeDocRef, (snap) => {
+
+  let lastKnownVersion = 0;
+
+  return onSnapshot(activeDocRef, async (snap) => {
     if (snap.exists()) {
       const data = snap.data();
-      if (Array.isArray(data.invoices) || Array.isArray(data.payments)) {
+      const currentVersion = Number(data.version) || 0;
+
+      // Avoid infinite loop if this was our own write
+      if (currentVersion !== 0 && currentVersion === lastKnownVersion) {
+        return;
+      }
+      lastKnownVersion = currentVersion;
+
+      // If invoices are embedded in snapshot, use them immediately
+      if (Array.isArray(data.invoices) && data.invoices.length > 0) {
+        const sanitizedInvoices = data.invoices.map((i: any, idx: number) => sanitizeInvoice(i, idx));
+        const sanitizedPayments = Array.isArray(data.payments) 
+          ? data.payments.map((p: any, idx: number) => sanitizePayment(p, idx))
+          : [];
+
         onUpdate({
-          invoices: data.invoices || [],
-          payments: data.payments || [],
+          invoices: sanitizedInvoices,
+          payments: sanitizedPayments,
           vendorName: data.vendorName
         });
+        return;
+      }
+
+      // Otherwise fetch the collection
+      try {
+        const fullDataset = await loadDatasetFromCloud();
+        if (fullDataset && (fullDataset.invoices.length > 0 || fullDataset.payments.length > 0)) {
+          onUpdate(fullDataset);
+        }
+      } catch (err) {
+        console.warn('[Cloud Sync] Live reload fetch notice:', err);
       }
     }
   }, (err) => {
-    console.warn('Firestore live subscription listener notice:', err);
+    console.warn('[Cloud Sync] Real-time subscription notice:', err);
   });
 }
 
 /**
- * Clear all cloud data (when user confirms Clear Data)
+ * Clear all data from Cloud Firestore (both collection documents and workspace doc)
  */
 export async function clearCloudData(): Promise<void> {
   await ensureAuth();
@@ -214,18 +359,26 @@ export async function clearCloudData(): Promise<void> {
     const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
     await deleteDoc(activeDocRef);
 
-    // Delete invoices collection
+    // Clear invoices
     const invSnap = await getDocs(collection(db, INVOICES_COLLECTION));
-    const batch1 = writeBatch(db);
-    invSnap.forEach(d => batch1.delete(d.ref));
-    await batch1.commit();
+    const invDocs = invSnap.docs;
+    for (let i = 0; i < invDocs.length; i += 200) {
+      const batch = writeBatch(db);
+      invDocs.slice(i, i + 200).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
 
-    // Delete payments collection
+    // Clear payments
     const pmtSnap = await getDocs(collection(db, PAYMENTS_COLLECTION));
-    const batch2 = writeBatch(db);
-    pmtSnap.forEach(d => batch2.delete(d.ref));
-    await batch2.commit();
+    const pmtDocs = pmtSnap.docs;
+    for (let i = 0; i < pmtDocs.length; i += 200) {
+      const batch = writeBatch(db);
+      pmtDocs.slice(i, i + 200).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    console.log('[Cloud Sync] Cloud Firestore collections completely purged.');
   } catch (err) {
-    console.warn('Clear cloud data warning:', err);
+    console.warn('[Cloud Sync] Clear cloud data warning:', err);
   }
 }

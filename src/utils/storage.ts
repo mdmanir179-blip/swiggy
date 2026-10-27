@@ -57,8 +57,12 @@ function openDB(): Promise<IDBDatabase> {
 /**
  * Save invoices to IndexedDB, LocalStorage, and Firebase Cloud Database for multi-device sync
  */
-export async function saveInvoicesToStorage(invoices: InvoiceRecord[], vendorName?: string): Promise<void> {
-  // 1. Try IndexedDB
+export async function saveInvoicesToStorage(
+  invoices: InvoiceRecord[], 
+  vendorName?: string, 
+  skipCloud = false
+): Promise<void> {
+  // 1. IndexedDB cache
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_INVOICES, 'readwrite');
@@ -74,10 +78,10 @@ export async function saveInvoicesToStorage(invoices: InvoiceRecord[], vendorNam
       tx.onerror = () => reject(tx.error);
     });
   } catch (err) {
-    console.warn('IndexedDB save invoices failed, using localStorage fallback', err);
+    console.warn('IndexedDB save invoices notice:', err);
   }
 
-  // 2. LocalStorage sync
+  // 2. LocalStorage cache
   try {
     if (invoices.length > 0) {
       localStorage.setItem(LOCAL_STORAGE_KEY_INVOICES, JSON.stringify(invoices));
@@ -89,73 +93,23 @@ export async function saveInvoicesToStorage(invoices: InvoiceRecord[], vendorNam
   }
 
   // 3. Multi-device Cloud Firestore sync
-  try {
-    if (invoices.length > 0) {
+  if (!skipCloud && invoices.length > 0) {
+    try {
       await saveInvoicesToCloud(invoices, vendorName);
+    } catch (err) {
+      console.warn('Firebase cloud sync notice (will retry on reconnect):', err);
     }
-  } catch (err) {
-    console.warn('Firebase cloud sync notice (will retry on reconnect):', err);
   }
-}
-
-/**
- * Load invoices from IndexedDB, localStorage, or Firebase Cloud Database
- */
-export async function loadInvoicesFromStorage(): Promise<InvoiceRecord[]> {
-  // 1. Try IndexedDB
-  try {
-    const db = await openDB();
-    const tx = db.transaction(STORE_INVOICES, 'readonly');
-    const store = tx.objectStore(STORE_INVOICES);
-    const request = store.getAll();
-
-    const result = await new Promise<InvoiceRecord[]>((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result || []);
-      request.onerror = () => reject(request.error);
-    });
-
-    if (Array.isArray(result) && result.length > 0) {
-      return result;
-    }
-  } catch (err) {
-    console.warn('IndexedDB load invoices notice, checking cloud and localStorage', err);
-  }
-
-  // 2. Check localStorage
-  try {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY_INVOICES) || localStorage.getItem('instamart_invoices');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (err) {
-    console.warn('localStorage invoice read notice:', err);
-  }
-
-  // 3. If opening on a new device or fresh browser (e.g. Vercel deployment), fetch from Cloud Firestore!
-  try {
-    const cloudDataset = await loadDatasetFromCloud();
-    if (cloudDataset && cloudDataset.invoices && cloudDataset.invoices.length > 0) {
-      // Cache locally for offline availability
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY_INVOICES, JSON.stringify(cloudDataset.invoices));
-      } catch {}
-      return cloudDataset.invoices;
-    }
-  } catch (err) {
-    console.warn('Cloud dataset fetch notice:', err);
-  }
-
-  return [];
 }
 
 /**
  * Save payments to IndexedDB, LocalStorage, and Firebase Cloud Database
  */
-export async function savePaymentsToStorage(payments: PaymentRecord[]): Promise<void> {
-  // 1. IndexedDB
+export async function savePaymentsToStorage(
+  payments: PaymentRecord[], 
+  skipCloud = false
+): Promise<void> {
+  // 1. IndexedDB cache
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_PAYMENTS, 'readwrite');
@@ -170,10 +124,10 @@ export async function savePaymentsToStorage(payments: PaymentRecord[]): Promise<
       tx.onerror = () => reject(tx.error);
     });
   } catch (err) {
-    console.warn('IndexedDB save payments failed, using localStorage fallback', err);
+    console.warn('IndexedDB save payments notice:', err);
   }
 
-  // 2. LocalStorage sync
+  // 2. LocalStorage cache
   try {
     if (payments.length > 0) {
       localStorage.setItem(LOCAL_STORAGE_KEY_PAYMENTS, JSON.stringify(payments));
@@ -185,63 +139,114 @@ export async function savePaymentsToStorage(payments: PaymentRecord[]): Promise<
   }
 
   // 3. Cloud Firestore sync
-  try {
-    if (payments.length > 0) {
+  if (!skipCloud && payments.length > 0) {
+    try {
       await savePaymentsToCloud(payments);
+    } catch (err) {
+      console.warn('Firebase cloud sync notice for payments:', err);
     }
-  } catch (err) {
-    console.warn('Firebase cloud sync notice for payments:', err);
   }
 }
 
 /**
- * Load payments from IndexedDB, LocalStorage, or Firebase Cloud Database
+ * Load complete dataset (invoices + payments) prioritizing Cloud Firestore for multi-device parity
  */
-export async function loadPaymentsFromStorage(): Promise<PaymentRecord[]> {
+export async function loadInitialDataset(): Promise<{
+  invoices: InvoiceRecord[];
+  payments: PaymentRecord[];
+  vendorName?: string;
+  source: 'cloud' | 'indexedDB' | 'localStorage' | 'none';
+}> {
+  // 1. Check Cloud Firestore FIRST (if online) to guarantee across-device consistency
+  if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+    try {
+      const cloudData = await loadDatasetFromCloud();
+      if (cloudData && (cloudData.invoices.length > 0 || cloudData.payments.length > 0)) {
+        // Cache locally for fast offline access next time
+        await saveInvoicesToStorage(cloudData.invoices, cloudData.vendorName, true);
+        await savePaymentsToStorage(cloudData.payments, true);
+
+        return {
+          invoices: cloudData.invoices,
+          payments: cloudData.payments,
+          vendorName: cloudData.vendorName,
+          source: 'cloud'
+        };
+      }
+    } catch (err) {
+      console.warn('Cloud dataset startup fetch warning, falling back to offline cache:', err);
+    }
+  }
+
+  // 2. Offline Fallback: IndexedDB
   try {
     const db = await openDB();
-    const tx = db.transaction(STORE_PAYMENTS, 'readonly');
-    const store = tx.objectStore(STORE_PAYMENTS);
-    const request = store.getAll();
-
-    const result = await new Promise<PaymentRecord[]>((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result || []);
-      request.onerror = () => reject(request.error);
+    const invTx = db.transaction(STORE_INVOICES, 'readonly');
+    const invStore = invTx.objectStore(STORE_INVOICES);
+    const invReq = invStore.getAll();
+    const storedInvoices = await new Promise<InvoiceRecord[]>((resolve, reject) => {
+      invReq.onsuccess = () => resolve(invReq.result || []);
+      invReq.onerror = () => reject(invReq.error);
     });
 
-    if (Array.isArray(result) && result.length > 0) {
-      return result;
+    const pmtTx = db.transaction(STORE_PAYMENTS, 'readonly');
+    const pmtStore = pmtTx.objectStore(STORE_PAYMENTS);
+    const pmtReq = pmtStore.getAll();
+    const storedPayments = await new Promise<PaymentRecord[]>((resolve, reject) => {
+      pmtReq.onsuccess = () => resolve(pmtReq.result || []);
+      pmtReq.onerror = () => reject(pmtReq.error);
+    });
+
+    if (storedInvoices.length > 0 || storedPayments.length > 0) {
+      return {
+        invoices: storedInvoices,
+        payments: storedPayments,
+        source: 'indexedDB'
+      };
     }
   } catch (err) {
-    console.warn('IndexedDB load payments notice:', err);
+    console.warn('IndexedDB load notice:', err);
   }
 
+  // 3. Offline Fallback: LocalStorage
   try {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY_PAYMENTS) || localStorage.getItem('instamart_payments');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
+    const savedInv = localStorage.getItem(LOCAL_STORAGE_KEY_INVOICES) || localStorage.getItem('instamart_invoices');
+    const savedPmt = localStorage.getItem(LOCAL_STORAGE_KEY_PAYMENTS) || localStorage.getItem('instamart_payments');
+    const invParsed = savedInv ? JSON.parse(savedInv) : [];
+    const pmtParsed = savedPmt ? JSON.parse(savedPmt) : [];
+
+    if (Array.isArray(invParsed) && invParsed.length > 0) {
+      return {
+        invoices: invParsed,
+        payments: Array.isArray(pmtParsed) ? pmtParsed : [],
+        source: 'localStorage'
+      };
     }
   } catch (err) {
-    console.warn('localStorage payments read error:', err);
+    console.warn('LocalStorage load notice:', err);
   }
 
-  // Fallback to Cloud Firestore
-  try {
-    const cloudDataset = await loadDatasetFromCloud();
-    if (cloudDataset && cloudDataset.payments && cloudDataset.payments.length > 0) {
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY_PAYMENTS, JSON.stringify(cloudDataset.payments));
-      } catch {}
-      return cloudDataset.payments;
-    }
-  } catch (err) {
-    console.warn('Cloud dataset fetch notice for payments:', err);
-  }
+  return {
+    invoices: [],
+    payments: [],
+    source: 'none'
+  };
+}
 
-  return [];
+/**
+ * Load invoices helper (backwards compatibility)
+ */
+export async function loadInvoicesFromStorage(): Promise<InvoiceRecord[]> {
+  const result = await loadInitialDataset();
+  return result.invoices;
+}
+
+/**
+ * Load payments helper (backwards compatibility)
+ */
+export async function loadPaymentsFromStorage(): Promise<PaymentRecord[]> {
+  const result = await loadInitialDataset();
+  return result.payments;
 }
 
 /**

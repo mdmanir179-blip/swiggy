@@ -84,11 +84,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     }
 
     if (countInv > 0 && countPmt > 0) {
-      setUploadSuccessMsg(`Successfully loaded ${countInv} invoices and ${countPmt} payments!`);
+      setUploadSuccessMsg(`Successfully saved ${countInv} invoices & ${countPmt} payments to Cloud Database (Active across all devices)!`);
     } else if (countInv > 0) {
-      setUploadSuccessMsg(`Successfully loaded ${countInv} invoices!`);
+      setUploadSuccessMsg(`Successfully saved ${countInv} invoices to Cloud Database! Synced across all your devices.`);
     } else if (countPmt > 0) {
-      setUploadSuccessMsg(`Successfully loaded ${countPmt} payment records!`);
+      setUploadSuccessMsg(`Successfully saved ${countPmt} payment records to Cloud Database! Synced across all your devices.`);
     }
 
     setTimeout(() => {

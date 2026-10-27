@@ -5,12 +5,17 @@ import { calculateFinancialSummary } from './utils/summaryCalculator';
 import { loadSharedDatasetFromUrl } from './utils/shareManager';
 import { 
   saveInvoicesToStorage, 
-  loadInvoicesFromStorage, 
+  loadInitialDataset, 
   savePaymentsToStorage, 
-  loadPaymentsFromStorage,
   clearAllPersistentStorage 
 } from './utils/storage';
-import { subscribeToCloudLedger } from './utils/firebase';
+import { 
+  subscribeToCloudLedger, 
+  loadDatasetFromCloud, 
+  saveInvoicesToCloud, 
+  savePaymentsToCloud, 
+  updateSingleInvoiceInCloud 
+} from './utils/firebase';
 import { Header } from './components/Header';
 import { MetricCards } from './components/MetricCards';
 import { AnalyticsCharts } from './components/AnalyticsCharts';
@@ -70,26 +75,32 @@ export default function App() {
   });
 
   const [isStorageLoaded, setIsStorageLoaded] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
 
-  // Hydrate from IndexedDB on startup (overcomes 5MB localStorage limit & prevents data loss)
+  // Hydrate from Cloud Firestore first (ensures multi-device parity on startup), with IndexedDB offline fallback
   useEffect(() => {
     let isMounted = true;
     (async () => {
       try {
-        const storedInvoices = await loadInvoicesFromStorage();
-        const storedPayments = await loadPaymentsFromStorage();
+        setIsSyncing(true);
+        const dataset = await loadInitialDataset();
         if (isMounted) {
-          if (storedInvoices.length > 0) {
-            setInvoices(storedInvoices);
+          if (dataset.invoices.length > 0) {
+            setInvoices(dataset.invoices);
           }
-          if (storedPayments.length > 0) {
-            setPayments(storedPayments);
+          if (dataset.payments.length > 0) {
+            setPayments(dataset.payments);
           }
           setIsStorageLoaded(true);
+          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          setLastSyncTime(timeStr);
         }
       } catch (err) {
         console.warn('Persistent storage hydration failed:', err);
         if (isMounted) setIsStorageLoaded(true);
+      } finally {
+        if (isMounted) setIsSyncing(false);
       }
     })();
     return () => { isMounted = false; };
@@ -102,11 +113,14 @@ export default function App() {
       if (!isSubscribed) return;
       if (cloudData.invoices && cloudData.invoices.length > 0) {
         setInvoices(cloudData.invoices);
+        saveInvoicesToStorage(cloudData.invoices, cloudData.vendorName, true);
         setIsStorageLoaded(true);
       }
       if (cloudData.payments && cloudData.payments.length > 0) {
         setPayments(cloudData.payments);
+        savePaymentsToStorage(cloudData.payments, true);
       }
+      setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     });
 
     return () => {
@@ -114,6 +128,27 @@ export default function App() {
       unsubscribe();
     };
   }, []);
+
+  // Manual refresh from Cloud Database across devices
+  const refreshFromCloud = async () => {
+    setIsSyncing(true);
+    try {
+      const dataset = await loadDatasetFromCloud();
+      if (dataset && (dataset.invoices.length > 0 || dataset.payments.length > 0)) {
+        setInvoices(dataset.invoices);
+        setPayments(dataset.payments);
+        setIsStorageLoaded(true);
+        saveInvoicesToStorage(dataset.invoices, dataset.vendorName, true);
+        savePaymentsToStorage(dataset.payments, true);
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setLastSyncTime(timeStr);
+      }
+    } catch (err) {
+      console.warn('Manual cloud sync notice:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Shared dataset notice from URL link
   const [sharedNotice, setSharedNotice] = useState<{
@@ -151,15 +186,15 @@ export default function App() {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  // Sync state to persistent storage (IndexedDB + localStorage)
+  // Sync state to persistent local cache (IndexedDB + localStorage)
   useEffect(() => {
     if (!isStorageLoaded && invoices.length === 0) return;
-    saveInvoicesToStorage(invoices).catch(err => console.warn('Save invoices failed:', err));
+    saveInvoicesToStorage(invoices, undefined, true).catch(err => console.warn('Save invoices to cache failed:', err));
   }, [invoices, isStorageLoaded]);
 
   useEffect(() => {
     if (!isStorageLoaded && payments.length === 0) return;
-    savePaymentsToStorage(payments).catch(err => console.warn('Save payments failed:', err));
+    savePaymentsToStorage(payments, true).catch(err => console.warn('Save payments to cache failed:', err));
   }, [payments, isStorageLoaded]);
 
   // Check URL on startup for shared dataset link (?share=... or #data=...)
@@ -213,41 +248,63 @@ export default function App() {
   // Vendor & Customer details from first record if loaded
   const vendorName = invoices[0]?.vendorName || (payments[0]?.vendorName ?? '');
 
-  // Handle uploaded invoices
-  const handleInvoicesLoaded = (newInvoices: InvoiceRecord[], mode: 'replace' | 'append') => {
+  // Handle uploaded invoices (Syncs immediately to Cloud Firestore for multi-device visibility)
+  const handleInvoicesLoaded = async (newInvoices: InvoiceRecord[], mode: 'replace' | 'append') => {
+    setIsSyncing(true);
+    let targetInvoices: InvoiceRecord[] = [];
+    let targetPayments: PaymentRecord[] = [];
+
     if (mode === 'replace') {
-      setInvoices(newInvoices);
-      const derived = deriveInitialPayments(newInvoices);
-      setPayments(derived);
-      saveInvoicesToStorage(newInvoices);
-      savePaymentsToStorage(derived);
+      targetInvoices = newInvoices;
+      targetPayments = deriveInitialPayments(newInvoices);
     } else {
-      setInvoices(prev => {
-        const merged = [...prev, ...newInvoices];
-        saveInvoicesToStorage(merged);
-        return merged;
-      });
+      targetInvoices = [...invoices, ...newInvoices];
       const newDerived = deriveInitialPayments(newInvoices);
-      setPayments(prev => {
-        const merged = [...prev, ...newDerived];
-        savePaymentsToStorage(merged);
-        return merged;
-      });
+      targetPayments = [...payments, ...newDerived];
     }
+
+    setInvoices(targetInvoices);
+    setPayments(targetPayments);
     setSharedNotice(null);
+
+    // Immediate local cache
+    saveInvoicesToStorage(targetInvoices, targetInvoices[0]?.vendorName, true);
+    savePaymentsToStorage(targetPayments, true);
+
+    // Immediate Cloud Firestore push so other devices (Vercel, phone, PC) see data instantly
+    try {
+      await saveInvoicesToCloud(targetInvoices, targetInvoices[0]?.vendorName);
+      if (targetPayments.length > 0) {
+        await savePaymentsToCloud(targetPayments);
+      }
+      setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } catch (err) {
+      console.error('Failed to sync uploaded invoices to cloud:', err);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Handle uploaded payments
-  const handlePaymentsLoaded = (newPayments: PaymentRecord[], mode: 'replace' | 'append') => {
+  const handlePaymentsLoaded = async (newPayments: PaymentRecord[], mode: 'replace' | 'append') => {
+    setIsSyncing(true);
+    let targetPayments: PaymentRecord[] = [];
     if (mode === 'replace') {
-      setPayments(newPayments);
-      savePaymentsToStorage(newPayments);
+      targetPayments = newPayments;
     } else {
-      setPayments(prev => {
-        const merged = [...prev, ...newPayments];
-        savePaymentsToStorage(merged);
-        return merged;
-      });
+      targetPayments = [...payments, ...newPayments];
+    }
+
+    setPayments(targetPayments);
+    savePaymentsToStorage(targetPayments, true);
+
+    try {
+      await savePaymentsToCloud(targetPayments);
+      setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } catch (err) {
+      console.error('Failed to sync uploaded payments to cloud:', err);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -271,12 +328,13 @@ export default function App() {
     paymentRef: string, 
     paymentType: string
   ) => {
-    setInvoices(prev => prev.map(inv => {
+    let updatedTargetInvoice: InvoiceRecord | null = null;
+    const nextInvoices = invoices.map(inv => {
       if (inv.id !== invoiceId) return inv;
       const outstanding = Math.max(0, inv.netPayableAmount - paidAmount);
       const isFullPaid = outstanding <= 0.01;
       const paymentStatus = isFullPaid ? 'Paid' : (paidAmount > 0 ? 'Partially Paid' : 'Unpaid');
-      return {
+      const updated: InvoiceRecord = {
         ...inv,
         paymentAmount: paidAmount,
         outstandingPayment: outstanding,
@@ -285,60 +343,70 @@ export default function App() {
         paymentReferenceNo: paymentRef,
         statusOfInvoice: isFullPaid ? 'Paid' : inv.statusOfInvoice
       };
-    }));
+      updatedTargetInvoice = updated;
+      return updated;
+    });
+
+    setInvoices(nextInvoices);
 
     // Also update payments ledger
-    setPayments(prev => {
-      const invNum = invoiceToMarkPaid?.invoiceNumber || '';
-      const existingIdx = prev.findIndex(p => (invNum && p.linkedInvoices?.includes(invNum)) || (paymentRef && p.paymentReferenceNo === paymentRef));
-      if (existingIdx >= 0) {
-        const copy = [...prev];
-        const existing = copy[existingIdx];
-        copy[existingIdx] = {
-          ...existing,
-          amount: paidAmount,
-          netAmount: paidAmount,
-          paymentDate: paymentDate,
-          paymentReferenceNo: paymentRef,
-          paymentType: paymentType || existing.paymentType,
-          linkedInvoices: invNum && !existing.linkedInvoices?.includes(invNum) 
-            ? [...(existing.linkedInvoices || []), invNum] 
-            : existing.linkedInvoices
-        };
-        return copy;
-      } else if (invoiceToMarkPaid && paidAmount > 0) {
-        const newPay: PaymentRecord = {
-          id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          organizationName: invoiceToMarkPaid.organizationName || 'Instamart Retail',
-          vendorName: invoiceToMarkPaid.vendorName,
-          vendorCode: invoiceToMarkPaid.vendorCode,
-          gstin: invoiceToMarkPaid.gstin || '',
-          pan: invoiceToMarkPaid.pan || '',
-          tradeVendorType: 'Goods / Grocery Supplier',
-          paymentType: paymentType || 'NEFT',
-          paymentDate: paymentDate,
-          paymentNumber: paymentRef || `PMT-${Date.now().toString().slice(-6)}`,
-          paymentReferenceNo: paymentRef,
-          amount: paidAmount,
-          reversal: 0,
-          netAmount: paidAmount,
-          linkedInvoices: [invoiceToMarkPaid.invoiceNumber],
-          matchedInvoiceCount: 1
-        };
-        return [newPay, ...prev];
-      }
-      return prev;
-    });
+    let nextPayments = payments;
+    const invNum = invoiceToMarkPaid?.invoiceNumber || '';
+    const existingIdx = payments.findIndex(p => (invNum && p.linkedInvoices?.includes(invNum)) || (paymentRef && p.paymentReferenceNo === paymentRef));
+    if (existingIdx >= 0) {
+      const copy = [...payments];
+      const existing = copy[existingIdx];
+      copy[existingIdx] = {
+        ...existing,
+        amount: paidAmount,
+        netAmount: paidAmount,
+        paymentDate: paymentDate,
+        paymentReferenceNo: paymentRef,
+        paymentType: paymentType || existing.paymentType,
+        linkedInvoices: invNum && !existing.linkedInvoices?.includes(invNum) 
+          ? [...(existing.linkedInvoices || []), invNum] 
+          : existing.linkedInvoices
+      };
+      nextPayments = copy;
+    } else if (invoiceToMarkPaid && paidAmount > 0) {
+      const newPay: PaymentRecord = {
+        id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        organizationName: invoiceToMarkPaid.organizationName || 'Instamart Retail',
+        vendorName: invoiceToMarkPaid.vendorName,
+        vendorCode: invoiceToMarkPaid.vendorCode,
+        gstin: invoiceToMarkPaid.gstin || '',
+        pan: invoiceToMarkPaid.pan || '',
+        tradeVendorType: 'Goods / Grocery Supplier',
+        paymentType: paymentType || 'NEFT',
+        paymentDate: paymentDate,
+        paymentNumber: paymentRef || `PMT-${Date.now().toString().slice(-6)}`,
+        paymentReferenceNo: paymentRef,
+        amount: paidAmount,
+        reversal: 0,
+        netAmount: paidAmount,
+        linkedInvoices: [invoiceToMarkPaid.invoiceNumber],
+        matchedInvoiceCount: 1
+      };
+      nextPayments = [newPay, ...payments];
+    }
+    setPayments(nextPayments);
 
     setIsMarkPaidOpen(false);
     setInvoiceToMarkPaid(null);
+
+    // Sync to Cloud Database immediately
+    if (updatedTargetInvoice) {
+      updateSingleInvoiceInCloud(updatedTargetInvoice).catch(err => console.warn('Cloud invoice payment update notice:', err));
+    }
+    savePaymentsToCloud(nextPayments).catch(err => console.warn('Cloud payments update notice:', err));
   };
 
   // Revert payment back to unpaid
   const handleRevertToUnpaid = (invoiceId: string) => {
-    setInvoices(prev => prev.map(inv => {
+    let updatedTargetInvoice: InvoiceRecord | null = null;
+    const nextInvoices = invoices.map(inv => {
       if (inv.id !== invoiceId) return inv;
-      return {
+      const updated: InvoiceRecord = {
         ...inv,
         paymentAmount: 0,
         outstandingPayment: inv.netPayableAmount,
@@ -347,65 +415,79 @@ export default function App() {
         paymentReferenceNo: '',
         statusOfInvoice: 'Approved'
       };
-    }));
+      updatedTargetInvoice = updated;
+      return updated;
+    });
+
+    setInvoices(nextInvoices);
     setIsMarkPaidOpen(false);
     setInvoiceToMarkPaid(null);
+
+    if (updatedTargetInvoice) {
+      updateSingleInvoiceInCloud(updatedTargetInvoice).catch(err => console.warn('Cloud revert invoice notice:', err));
+    }
   };
 
   // Save manual or edited invoice
   const handleSaveManualInvoice = (invoice: InvoiceRecord) => {
-    setInvoices(prev => {
-      const idx = prev.findIndex(i => i.id === invoice.id);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = invoice;
-        return copy;
-      } else {
-        return [invoice, ...prev];
-      }
-    });
+    let nextInvoices = invoices;
+    const idx = invoices.findIndex(i => i.id === invoice.id);
+    if (idx >= 0) {
+      const copy = [...invoices];
+      copy[idx] = invoice;
+      nextInvoices = copy;
+    } else {
+      nextInvoices = [invoice, ...invoices];
+    }
+    setInvoices(nextInvoices);
 
+    let nextPayments = payments;
     if (invoice.paymentAmount > 0) {
-      setPayments(prev => {
-        const invNum = invoice.invoiceNumber;
-        const idx = prev.findIndex(p => p.linkedInvoices?.includes(invNum) || (invoice.paymentReferenceNo && p.paymentReferenceNo === invoice.paymentReferenceNo));
-        if (idx >= 0) {
-          const copy = [...prev];
-          const existing = copy[idx];
-          copy[idx] = {
-            ...existing,
-            amount: invoice.paymentAmount,
-            netAmount: invoice.paymentAmount,
-            paymentDate: invoice.lastPaymentDate || existing.paymentDate,
-            paymentReferenceNo: invoice.paymentReferenceNo || existing.paymentReferenceNo
-          };
-          return copy;
-        } else {
-          const newPay: PaymentRecord = {
-            id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            organizationName: invoice.organizationName || 'Instamart Retail',
-            vendorName: invoice.vendorName,
-            vendorCode: invoice.vendorCode,
-            gstin: invoice.gstin || '',
-            pan: invoice.pan || '',
-            tradeVendorType: 'Goods / Grocery Supplier',
-            paymentType: 'NEFT',
-            paymentDate: invoice.lastPaymentDate || invoice.invoiceAccountingDate,
-            paymentNumber: invoice.paymentReferenceNo || `PMT-${Date.now().toString().slice(-6)}`,
-            paymentReferenceNo: invoice.paymentReferenceNo || '',
-            amount: invoice.paymentAmount,
-            reversal: 0,
-            netAmount: invoice.paymentAmount,
-            linkedInvoices: [invoice.invoiceNumber],
-            matchedInvoiceCount: 1
-          };
-          return [newPay, ...prev];
-        }
-      });
+      const invNum = invoice.invoiceNumber;
+      const pIdx = payments.findIndex(p => p.linkedInvoices?.includes(invNum) || (invoice.paymentReferenceNo && p.paymentReferenceNo === invoice.paymentReferenceNo));
+      if (pIdx >= 0) {
+        const copy = [...payments];
+        const existing = copy[pIdx];
+        copy[pIdx] = {
+          ...existing,
+          amount: invoice.paymentAmount,
+          netAmount: invoice.paymentAmount,
+          paymentDate: invoice.lastPaymentDate || existing.paymentDate,
+          paymentReferenceNo: invoice.paymentReferenceNo || existing.paymentReferenceNo
+        };
+        nextPayments = copy;
+      } else {
+        const newPay: PaymentRecord = {
+          id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          organizationName: invoice.organizationName || 'Instamart Retail',
+          vendorName: invoice.vendorName,
+          vendorCode: invoice.vendorCode,
+          gstin: invoice.gstin || '',
+          pan: invoice.pan || '',
+          tradeVendorType: 'Goods / Grocery Supplier',
+          paymentType: 'NEFT',
+          paymentDate: invoice.lastPaymentDate || invoice.invoiceAccountingDate,
+          paymentNumber: invoice.paymentReferenceNo || `PMT-${Date.now().toString().slice(-6)}`,
+          paymentReferenceNo: invoice.paymentReferenceNo || '',
+          amount: invoice.paymentAmount,
+          reversal: 0,
+          netAmount: invoice.paymentAmount,
+          linkedInvoices: [invoice.invoiceNumber],
+          matchedInvoiceCount: 1
+        };
+        nextPayments = [newPay, ...payments];
+      }
+      setPayments(nextPayments);
     }
 
     setIsAddInvoiceOpen(false);
     setInvoiceToEdit(null);
+
+    // Sync to Cloud Database immediately
+    updateSingleInvoiceInCloud(invoice).catch(err => console.warn('Cloud invoice save notice:', err));
+    if (invoice.paymentAmount > 0) {
+      savePaymentsToCloud(nextPayments).catch(err => console.warn('Cloud payment save notice:', err));
+    }
   };
 
   // Clear all data directly from in-app modal
@@ -467,6 +549,9 @@ export default function App() {
         totalPayments={payments.length}
         theme={theme}
         onToggleTheme={toggleTheme}
+        isSyncing={isSyncing}
+        lastSyncTime={lastSyncTime}
+        onManualSync={refreshFromCloud}
       />
 
       {/* Main Content Viewport - Full Screen Desktop Presentation */}
