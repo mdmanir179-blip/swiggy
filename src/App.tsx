@@ -10,6 +10,7 @@ import {
   loadPaymentsFromStorage,
   clearAllPersistentStorage 
 } from './utils/storage';
+import { subscribeToCloudLedger } from './utils/firebase';
 import { Header } from './components/Header';
 import { MetricCards } from './components/MetricCards';
 import { AnalyticsCharts } from './components/AnalyticsCharts';
@@ -92,6 +93,26 @@ export default function App() {
       }
     })();
     return () => { isMounted = false; };
+  }, []);
+
+  // Real-time multi-device cloud synchronization via Firebase Firestore
+  useEffect(() => {
+    let isSubscribed = true;
+    const unsubscribe = subscribeToCloudLedger((cloudData) => {
+      if (!isSubscribed) return;
+      if (cloudData.invoices && cloudData.invoices.length > 0) {
+        setInvoices(cloudData.invoices);
+        setIsStorageLoaded(true);
+      }
+      if (cloudData.payments && cloudData.payments.length > 0) {
+        setPayments(cloudData.payments);
+      }
+    });
+
+    return () => {
+      isSubscribed = false;
+      unsubscribe();
+    };
   }, []);
 
   // Shared dataset notice from URL link

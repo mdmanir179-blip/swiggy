@@ -1,4 +1,10 @@
 import { InvoiceRecord, PaymentRecord } from '../types';
+import { 
+  saveInvoicesToCloud, 
+  savePaymentsToCloud, 
+  loadDatasetFromCloud, 
+  clearCloudData 
+} from './firebase';
 
 const DB_NAME = 'InstamartTrackerDB';
 const DB_VERSION = 1;
@@ -49,16 +55,15 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 /**
- * Save invoices to IndexedDB with localStorage fallback
+ * Save invoices to IndexedDB, LocalStorage, and Firebase Cloud Database for multi-device sync
  */
-export async function saveInvoicesToStorage(invoices: InvoiceRecord[]): Promise<void> {
+export async function saveInvoicesToStorage(invoices: InvoiceRecord[], vendorName?: string): Promise<void> {
   // 1. Try IndexedDB
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_INVOICES, 'readwrite');
     const store = tx.objectStore(STORE_INVOICES);
     
-    // Clear old items and write all
     store.clear();
     for (const inv of invoices) {
       store.put(inv);
@@ -72,7 +77,7 @@ export async function saveInvoicesToStorage(invoices: InvoiceRecord[]): Promise<
     console.warn('IndexedDB save invoices failed, using localStorage fallback', err);
   }
 
-  // 2. Also keep localStorage in sync (with quota safety)
+  // 2. LocalStorage sync
   try {
     if (invoices.length > 0) {
       localStorage.setItem(LOCAL_STORAGE_KEY_INVOICES, JSON.stringify(invoices));
@@ -80,12 +85,21 @@ export async function saveInvoicesToStorage(invoices: InvoiceRecord[]): Promise<
       localStorage.removeItem(LOCAL_STORAGE_KEY_INVOICES);
     }
   } catch (err) {
-    console.warn('localStorage invoice sync warning (likely quota exceeded):', err);
+    console.warn('localStorage invoice sync warning:', err);
+  }
+
+  // 3. Multi-device Cloud Firestore sync
+  try {
+    if (invoices.length > 0) {
+      await saveInvoicesToCloud(invoices, vendorName);
+    }
+  } catch (err) {
+    console.warn('Firebase cloud sync notice (will retry on reconnect):', err);
   }
 }
 
 /**
- * Load invoices from IndexedDB or localStorage
+ * Load invoices from IndexedDB, localStorage, or Firebase Cloud Database
  */
 export async function loadInvoicesFromStorage(): Promise<InvoiceRecord[]> {
   // 1. Try IndexedDB
@@ -104,10 +118,10 @@ export async function loadInvoicesFromStorage(): Promise<InvoiceRecord[]> {
       return result;
     }
   } catch (err) {
-    console.warn('IndexedDB load invoices failed, attempting localStorage', err);
+    console.warn('IndexedDB load invoices notice, checking cloud and localStorage', err);
   }
 
-  // 2. Fallback to localStorage
+  // 2. Check localStorage
   try {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY_INVOICES) || localStorage.getItem('instamart_invoices');
     if (saved) {
@@ -117,17 +131,31 @@ export async function loadInvoicesFromStorage(): Promise<InvoiceRecord[]> {
       }
     }
   } catch (err) {
-    console.warn('localStorage invoice read error:', err);
+    console.warn('localStorage invoice read notice:', err);
+  }
+
+  // 3. If opening on a new device or fresh browser (e.g. Vercel deployment), fetch from Cloud Firestore!
+  try {
+    const cloudDataset = await loadDatasetFromCloud();
+    if (cloudDataset && cloudDataset.invoices && cloudDataset.invoices.length > 0) {
+      // Cache locally for offline availability
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_INVOICES, JSON.stringify(cloudDataset.invoices));
+      } catch {}
+      return cloudDataset.invoices;
+    }
+  } catch (err) {
+    console.warn('Cloud dataset fetch notice:', err);
   }
 
   return [];
 }
 
 /**
- * Save payments to IndexedDB with localStorage fallback
+ * Save payments to IndexedDB, LocalStorage, and Firebase Cloud Database
  */
 export async function savePaymentsToStorage(payments: PaymentRecord[]): Promise<void> {
-  // 1. Try IndexedDB
+  // 1. IndexedDB
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_PAYMENTS, 'readwrite');
@@ -155,10 +183,19 @@ export async function savePaymentsToStorage(payments: PaymentRecord[]): Promise<
   } catch (err) {
     console.warn('localStorage payments sync error:', err);
   }
+
+  // 3. Cloud Firestore sync
+  try {
+    if (payments.length > 0) {
+      await savePaymentsToCloud(payments);
+    }
+  } catch (err) {
+    console.warn('Firebase cloud sync notice for payments:', err);
+  }
 }
 
 /**
- * Load payments from IndexedDB or localStorage
+ * Load payments from IndexedDB, LocalStorage, or Firebase Cloud Database
  */
 export async function loadPaymentsFromStorage(): Promise<PaymentRecord[]> {
   try {
@@ -176,7 +213,7 @@ export async function loadPaymentsFromStorage(): Promise<PaymentRecord[]> {
       return result;
     }
   } catch (err) {
-    console.warn('IndexedDB load payments failed, attempting localStorage', err);
+    console.warn('IndexedDB load payments notice:', err);
   }
 
   try {
@@ -191,11 +228,24 @@ export async function loadPaymentsFromStorage(): Promise<PaymentRecord[]> {
     console.warn('localStorage payments read error:', err);
   }
 
+  // Fallback to Cloud Firestore
+  try {
+    const cloudDataset = await loadDatasetFromCloud();
+    if (cloudDataset && cloudDataset.payments && cloudDataset.payments.length > 0) {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_PAYMENTS, JSON.stringify(cloudDataset.payments));
+      } catch {}
+      return cloudDataset.payments;
+    }
+  } catch (err) {
+    console.warn('Cloud dataset fetch notice for payments:', err);
+  }
+
   return [];
 }
 
 /**
- * Clear all stored data from IndexedDB and localStorage
+ * Clear all stored data from IndexedDB, localStorage, and Firebase Cloud Database
  */
 export async function clearAllPersistentStorage(): Promise<void> {
   try {
@@ -216,5 +266,11 @@ export async function clearAllPersistentStorage(): Promise<void> {
     localStorage.removeItem('instamart_payments');
   } catch {
     // ignore
+  }
+
+  try {
+    await clearCloudData();
+  } catch (err) {
+    console.warn('Cloud clear error:', err);
   }
 }

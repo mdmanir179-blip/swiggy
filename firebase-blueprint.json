@@ -1,0 +1,73 @@
+{
+  "entities": {
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Instamart vendor invoice record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "invoiceAccountingDate": { "type": "string" },
+        "vendorName": { "type": "string" },
+        "vendorCode": { "type": "string" },
+        "organizationName": { "type": "string" },
+        "warehouseName": { "type": "string" },
+        "poNumber": { "type": "string" },
+        "grnNumber": { "type": "string" },
+        "netPayableAmount": { "type": "number" },
+        "paymentAmount": { "type": "number" },
+        "outstandingPayment": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "lastPaymentDate": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "paymentReferenceNo": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "invoiceNumber"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Instamart vendor payment remittance record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "paymentNumber": { "type": "string" },
+        "paymentReferenceNo": { "type": "string" },
+        "paymentDate": { "type": "string" },
+        "amount": { "type": "number" },
+        "netAmount": { "type": "number" },
+        "vendorName": { "type": "string" },
+        "vendorCode": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "paymentNumber"]
+    },
+    "Workspace": {
+      "title": "Workspace",
+      "description": "Active ledger state and summary metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vendorName": { "type": "string" },
+        "totalInvoices": { "type": "number" },
+        "totalPayments": { "type": "number" },
+        "lastUpdated": { "type": "string" }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestore": {
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Collection of vendor invoices"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Collection of vendor bank remittances"
+    },
+    "/workspace/{docId}": {
+      "schema": { "$ref": "#/entities/Workspace" },
+      "description": "Workspace metadata"
+    }
+  }
+}

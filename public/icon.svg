@@ -1,23 +1,60 @@
-<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="imCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ff5200" />
-      <stop offset="50%" stop-color="#f59e0b" />
-      <stop offset="100%" stop-color="#d97706" />
+    <!-- Background Gradient (Instamart Brand Orange to Deep Warm Coral) -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF5B00" />
+      <stop offset="50%" stop-color="#FF4500" />
+      <stop offset="100%" stop-color="#D93800" />
     </linearGradient>
+
+    <!-- Subtle Outer Border Glow -->
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.08" />
+    </linearGradient>
+
+    <!-- Invoice Sheet Gradient -->
+    <linearGradient id="sheetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F1F5F9" />
+    </linearGradient>
+
+    <!-- Lightning Bolt Gradient -->
     <linearGradient id="boltGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="100%" stop-color="#fef08a" />
+      <stop offset="0%" stop-color="#FFE600" />
+      <stop offset="100%" stop-color="#FFA800" />
     </linearGradient>
-    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#34d399" />
-      <stop offset="100%" stop-color="#059669" />
+
+    <!-- Rupee Badge Gradient -->
+    <linearGradient id="badgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#047857" />
     </linearGradient>
   </defs>
-  <rect x="4" y="4" width="92" height="92" rx="22" fill="url(#imCardGrad)" />
-  <rect x="4" y="4" width="92" height="92" rx="22" stroke="rgba(255, 255, 255, 0.4)" stroke-width="3" />
-  <path d="M26 24C26 21.7909 27.7909 20 30 20H70C72.2091 20 74 21.7909 74 24V76L66 71L58 76L50 71L42 76L34 71L26 76V24Z" fill="rgba(15, 23, 42, 0.28)" />
-  <path d="M54 22L32 50H48L44 76L68 46H52L54 22Z" fill="url(#boltGrad)" stroke="#0f172a" stroke-width="2.5" stroke-linejoin="round" />
-  <circle cx="72" cy="72" r="16" fill="url(#emeraldGrad)" stroke="#0f172a" stroke-width="2.5" />
-  <text x="72" y="77.5" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="15" fill="#ffffff" text-anchor="middle">₹</text>
+
+  <!-- Base App Tile with Squircle Rounded Corners -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bgGrad)" />
+  <rect x="16" y="16" width="480" height="480" rx="112" stroke="url(#borderGrad)" stroke-width="8" />
+
+  <!-- Soft Shadow under the Invoice Document -->
+  <path d="M128 124 C128 110 138 98 152 98 H360 C374 98 384 110 384 124 V392 L352 374 L320 392 L288 374 L256 392 L224 374 L192 392 L160 374 L128 392 Z" fill="#992600" fill-opacity="0.35" transform="translate(0, 10)" />
+
+  <!-- Main Invoice Document Shape -->
+  <path d="M128 116 C128 102 140 90 154 90 H358 C372 90 384 102 384 116 V382 L352 364 L320 382 L288 364 L256 382 L224 364 L192 382 L160 364 L128 382 Z" fill="url(#sheetGrad)" />
+
+  <!-- Accounting Document Lines (Subtle Slate/Grey) -->
+  <rect x="168" y="148" width="176" height="18" rx="9" fill="#CBD5E1" />
+  <rect x="168" y="186" width="120" height="14" rx="7" fill="#E2E8F0" />
+  <rect x="168" y="218" width="144" height="14" rx="7" fill="#E2E8F0" />
+  <rect x="168" y="250" width="100" height="14" rx="7" fill="#E2E8F0" />
+
+  <!-- Lightning Bolt (Instamart Quick Delivery Speed Symbol) -->
+  <path d="M286 114 L186 264 H260 L234 382 L344 226 H272 L286 114 Z" fill="url(#boltGrad)" stroke="#B45309" stroke-width="6" stroke-linejoin="round" />
+
+  <!-- Rupee Financial Reconciled Badge (Bottom Right) -->
+  <circle cx="362" cy="362" r="72" fill="#064E3B" />
+  <circle cx="362" cy="362" r="66" fill="url(#badgeGrad)" stroke="#FFFFFF" stroke-width="6" />
+
+  <!-- Rupee Symbol Text -->
+  <text x="362" y="388" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-size="78" fill="#FFFFFF" text-anchor="middle">₹</text>
 </svg>

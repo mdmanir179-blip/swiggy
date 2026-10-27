@@ -22,22 +22,27 @@ export const InstamartLogo: React.FC<LogoProps> = ({ className = 'w-8 h-8 sm:w-9
         <defs>
           <linearGradient id="imCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#ff5200" />
-            <stop offset="50%" stopColor="#f59e0b" />
-            <stop offset="100%" stopColor="#d97706" />
+            <stop offset="50%" stopColor="#ff4500" />
+            <stop offset="100%" stopColor="#d93800" />
+          </linearGradient>
+
+          <linearGradient id="sheetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="100%" stopColor="#f1f5f9" />
           </linearGradient>
 
           <linearGradient id="boltGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ffffff" />
-            <stop offset="100%" stopColor="#fef08a" />
+            <stop offset="0%" stopColor="#ffe600" />
+            <stop offset="100%" stopColor="#ffa800" />
           </linearGradient>
 
-          <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#34d399" />
-            <stop offset="100%" stopColor="#059669" />
+          <linearGradient id="badgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#047857" />
           </linearGradient>
         </defs>
 
-        {/* Base Card Background */}
+        {/* Squircle Badge Background */}
         <rect 
           x="3" 
           y="3" 
@@ -56,36 +61,42 @@ export const InstamartLogo: React.FC<LogoProps> = ({ className = 'w-8 h-8 sm:w-9
           strokeWidth="3" 
         />
 
-        {/* Receipt / Invoice Silhouette */}
+        {/* Invoice Paper Document */}
         <path
-          d="M26 24C26 21.7909 27.7909 20 30 20H70C72.2091 20 74 21.7909 74 24V76L66 71L58 76L50 71L42 76L34 71L26 76V24Z"
-          fill="rgba(15, 23, 42, 0.28)"
+          d="M25 23C25 20.5 27 18 30 18H70C73 18 75 20.5 75 23V75L69 72L63 75L57 72L50 75L43 72L37 75L31 72L25 75V23Z"
+          fill="url(#sheetGrad)"
         />
+
+        {/* Ledger Stripes */}
+        <rect x="33" y="28" width="34" height="3.5" rx="1.75" fill="#cbd5e1" />
+        <rect x="33" y="35" width="24" height="2.8" rx="1.4" fill="#e2e8f0" />
+        <rect x="33" y="41" width="28" height="2.8" rx="1.4" fill="#e2e8f0" />
+        <rect x="33" y="47" width="20" height="2.8" rx="1.4" fill="#e2e8f0" />
 
         {/* Quick Commerce Lightning Bolt */}
         <path
-          d="M54 22L32 50H48L44 76L68 46H52L54 22Z"
+          d="M56 22L36 50H50L45 74L68 44H54L56 22Z"
           fill="url(#boltGrad)"
-          stroke="#0f172a"
-          strokeWidth="2.5"
+          stroke="#b45309"
+          strokeWidth="1.5"
           strokeLinejoin="round"
         />
 
         {/* Financial Rupee Emblem */}
         <circle 
-          cx="72" 
-          cy="72" 
-          r="15" 
-          fill="url(#emeraldGrad)" 
-          stroke="#0f172a" 
-          strokeWidth="2.5"
+          cx="71" 
+          cy="71" 
+          r="14" 
+          fill="url(#badgeGrad)" 
+          stroke="#ffffff" 
+          strokeWidth="2" 
         />
         <text 
-          x="72" 
-          y="77" 
-          fontFamily="system-ui, -apple-system, sans-serif" 
+          x="71" 
+          y="76" 
+          fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
           fontWeight="900" 
-          fontSize="14" 
+          fontSize="15" 
           fill="#ffffff" 
           textAnchor="middle"
         >
