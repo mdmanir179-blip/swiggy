@@ -1,11 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ViewTab } from '../types';
 import { 
-  LayoutDashboard, 
-  FileSpreadsheet, 
-  CreditCard, 
-  GitCompare, 
-  Clock, 
   Upload, 
   Download, 
   Sun, 
@@ -16,14 +11,15 @@ import {
   Minimize2,
   PlusCircle,
   Cloud,
-  RefreshCw
+  RefreshCw,
+  PanelLeft
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import { InstamartLogo } from './InstamartLogo';
 
 interface HeaderProps {
-  currentTab: ViewTab;
-  onTabChange: (tab: ViewTab) => void;
+  currentTab?: ViewTab;
+  onTabChange?: (tab: ViewTab) => void;
   onOpenUpload: () => void;
   onOpenAddInvoice: () => void;
   onOpenExport: () => void;
@@ -37,6 +33,8 @@ interface HeaderProps {
   isSyncing?: boolean;
   lastSyncTime?: string;
   onManualSync?: () => void;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -54,7 +52,9 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleTheme,
   isSyncing = false,
   lastSyncTime,
-  onManualSync
+  onManualSync,
+  onToggleSidebar,
+  isSidebarOpen = true
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -86,8 +86,18 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="w-full max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-2 sm:gap-4 min-w-0">
           
-          {/* Zone 1: Logo & App Title - Protected against shrinking or overlapping */}
-          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 min-w-0 max-w-[50%] sm:max-w-none">
+          {/* Zone 1: Sidebar Toggle, Logo & App Title */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0 max-w-[50%] sm:max-w-none">
+            {onToggleSidebar && (
+              <button
+                onClick={onToggleSidebar}
+                className="p-1.5 sm:p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700/80 rounded-lg transition-colors flex items-center justify-center shrink-0"
+                title={isSidebarOpen ? 'Hide Navigation Menubar' : 'Show Navigation Menubar'}
+                aria-label="Toggle navigation menubar"
+              >
+                <PanelLeft className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-500" />
+              </button>
+            )}
             <InstamartLogo className="w-8 h-8 sm:w-9 sm:h-9 shrink-0" size={34} />
             <div className="min-w-0">
               <a href="#" className="text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-white truncate block">
@@ -103,70 +113,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Zone 2: Navigation Links / View Tabs (Displayed only when width >= 1280px to prevent crowding) */}
-          <nav className="hidden xl:flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 rounded-lg shrink-0">
-            <button
-              onClick={() => onTabChange('dashboard')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                currentTab === 'dashboard'
-                  ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              <span>Dashboard</span>
-            </button>
-
-            <button
-              onClick={() => onTabChange('invoices')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                currentTab === 'invoices'
-                  ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Invoice Ledger</span>
-            </button>
-
-            <button
-              onClick={() => onTabChange('payments')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                currentTab === 'payments'
-                  ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <CreditCard className="w-3.5 h-3.5" />
-              <span>Payment Report</span>
-            </button>
-
-            <button
-              onClick={() => onTabChange('reconciliation')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                currentTab === 'reconciliation'
-                  ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <GitCompare className="w-3.5 h-3.5" />
-              <span>Reconciliation</span>
-            </button>
-
-            <button
-              onClick={() => onTabChange('aging')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                currentTab === 'aging'
-                  ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>Aging & Overdue</span>
-            </button>
-          </nav>
-
-          {/* Zone 3: Primary Actions - Compact and Responsive */}
+          {/* Primary Actions - Compact and Responsive */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Real-time Multi-Device Cloud Sync Status Indicator */}
             {onManualSync && (
@@ -276,23 +223,6 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-        </div>
-
-        {/* Sub-Header Navigation Tabs for Mobile and Tablet (< 1280px) */}
-        <div className="xl:hidden flex items-center gap-1 py-2 overflow-x-auto border-t border-slate-200 dark:border-slate-800/60 no-scrollbar">
-          {(['dashboard', 'invoices', 'payments', 'reconciliation', 'aging'] as ViewTab[]).map(tab => (
-            <button
-              key={tab}
-              onClick={() => onTabChange(tab)}
-              className={`px-3 py-1 text-xs font-medium rounded-md capitalize whitespace-nowrap transition-colors ${
-                currentTab === tab 
-                  ? 'bg-amber-400 text-slate-950 font-semibold' 
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              {tab === 'invoices' ? 'Invoices' : tab === 'payments' ? 'Payments' : tab}
-            </button>
-          ))}
         </div>
       </div>
     </header>

@@ -6,8 +6,16 @@ import { Upload, X, FileSpreadsheet, CheckCircle2, AlertCircle, RefreshCw, FileT
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onInvoicesLoaded: (invoices: InvoiceRecord[], mode: 'replace' | 'append') => void;
-  onPaymentsLoaded: (payments: PaymentRecord[], mode: 'replace' | 'append') => void;
+  onInvoicesLoaded: (
+    invoices: InvoiceRecord[], 
+    mode: 'replace' | 'append', 
+    meta?: { fileName: string; rowCount: number; fileType: 'invoice' | 'payment' }
+  ) => void;
+  onPaymentsLoaded: (
+    payments: PaymentRecord[], 
+    mode: 'replace' | 'append', 
+    meta?: { fileName: string; rowCount: number; fileType: 'invoice' | 'payment' }
+  ) => void;
 }
 
 export const UploadModal: React.FC<UploadModalProps> = ({
@@ -77,10 +85,18 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     const countPmt = parseResult.payments?.length || 0;
 
     if (parseResult.invoices && countInv > 0) {
-      onInvoicesLoaded(parseResult.invoices, uploadMode);
+      onInvoicesLoaded(parseResult.invoices, uploadMode, {
+        fileName: parseResult.fileName,
+        rowCount: countInv,
+        fileType: 'invoice'
+      });
     }
     if (parseResult.payments && countPmt > 0) {
-      onPaymentsLoaded(parseResult.payments, uploadMode);
+      onPaymentsLoaded(parseResult.payments, uploadMode, {
+        fileName: parseResult.fileName,
+        rowCount: countPmt,
+        fileType: 'payment'
+      });
     }
 
     if (countInv > 0 && countPmt > 0) {

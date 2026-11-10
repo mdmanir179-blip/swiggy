@@ -108,3 +108,17 @@ export interface FilterOptions {
   minAmount?: number;
   maxAmount?: number;
 }
+
+export interface UploadActivityMeta {
+  fileName: string;
+  fileType: 'invoice' | 'payment';
+  rowCount: number;
+  uploadedAt: string;
+}
+
+export interface EditActivityMeta {
+  action: 'paid' | 'edited' | 'added' | 'reverted';
+  description: string;
+  invoiceNumber?: string;
+  editedAt: string;
+}

@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ViewTab, InvoiceRecord, PaymentRecord } from './types';
+import { ViewTab, InvoiceRecord, PaymentRecord, UploadActivityMeta, EditActivityMeta } from './types';
 import { deriveInitialPayments } from './data/initialData';
 import { calculateFinancialSummary } from './utils/summaryCalculator';
 import { loadSharedDatasetFromUrl } from './utils/shareManager';
+import { formatINR } from './utils/currency';
 import { 
   saveInvoicesToStorage, 
   loadInitialDataset, 
@@ -17,6 +18,9 @@ import {
   updateSingleInvoiceInCloud 
 } from './utils/firebase';
 import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { RecentActivityCard } from './components/RecentActivityCard';
 import { MetricCards } from './components/MetricCards';
 import { AnalyticsCharts } from './components/AnalyticsCharts';
 import { InvoiceTable } from './components/InvoiceTable';
@@ -78,6 +82,58 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
 
+  // Last uploaded file & last edit activity tracking for dashboard audit
+  const [lastUpload, setLastUpload] = useState<UploadActivityMeta | null>(() => {
+    try {
+      const saved = localStorage.getItem('instamart_last_upload');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+
+  const [lastEdit, setLastEdit] = useState<EditActivityMeta | null>(() => {
+    try {
+      const saved = localStorage.getItem('instamart_last_edit');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+
+  // Sidebar navigation states
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('instamart_sidebar_open');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return true;
+  });
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('instamart_sidebar_collapsed');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return false;
+  });
+
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen(prev => {
+      const next = !prev;
+      try { localStorage.setItem('instamart_sidebar_open', String(next)); } catch {}
+      return next;
+    });
+  };
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('instamart_sidebar_collapsed', String(next)); } catch {}
+      return next;
+    });
+  };
+
   // Hydrate from Cloud Firestore first (ensures multi-device parity on startup), with IndexedDB offline fallback
   useEffect(() => {
     let isMounted = true;
@@ -95,6 +151,19 @@ export default function App() {
           setIsStorageLoaded(true);
           const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setLastSyncTime(timeStr);
+        }
+
+        // Also check if cloud has stored lastUpload or lastEdit
+        const cloudData = await loadDatasetFromCloud();
+        if (isMounted && cloudData) {
+          if (cloudData.lastUpload) {
+            setLastUpload(cloudData.lastUpload);
+            try { localStorage.setItem('instamart_last_upload', JSON.stringify(cloudData.lastUpload)); } catch {}
+          }
+          if (cloudData.lastEdit) {
+            setLastEdit(cloudData.lastEdit);
+            try { localStorage.setItem('instamart_last_edit', JSON.stringify(cloudData.lastEdit)); } catch {}
+          }
         }
       } catch (err) {
         console.warn('Persistent storage hydration failed:', err);
@@ -119,6 +188,14 @@ export default function App() {
       if (cloudData.payments && cloudData.payments.length > 0) {
         setPayments(cloudData.payments);
         savePaymentsToStorage(cloudData.payments, true);
+      }
+      if (cloudData.lastUpload) {
+        setLastUpload(cloudData.lastUpload);
+        try { localStorage.setItem('instamart_last_upload', JSON.stringify(cloudData.lastUpload)); } catch {}
+      }
+      if (cloudData.lastEdit) {
+        setLastEdit(cloudData.lastEdit);
+        try { localStorage.setItem('instamart_last_edit', JSON.stringify(cloudData.lastEdit)); } catch {}
       }
       setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     });
@@ -158,15 +235,15 @@ export default function App() {
     createdAt?: string;
   } | null>(null);
 
-  // Theme support
+  // Theme support - Clean white (light) by default
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
       const savedTheme = localStorage.getItem('instamart_theme');
       if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     } catch {
-      return 'dark';
+      // ignore
     }
+    return 'light';
   });
 
   useEffect(() => {
@@ -249,7 +326,11 @@ export default function App() {
   const vendorName = invoices[0]?.vendorName || (payments[0]?.vendorName ?? '');
 
   // Handle uploaded invoices (Syncs immediately to Cloud Firestore for multi-device visibility)
-  const handleInvoicesLoaded = async (newInvoices: InvoiceRecord[], mode: 'replace' | 'append') => {
+  const handleInvoicesLoaded = async (
+    newInvoices: InvoiceRecord[], 
+    mode: 'replace' | 'append',
+    meta?: { fileName: string; rowCount: number; fileType: 'invoice' | 'payment' }
+  ) => {
     setIsSyncing(true);
     let targetInvoices: InvoiceRecord[] = [];
     let targetPayments: PaymentRecord[] = [];
@@ -267,15 +348,42 @@ export default function App() {
     setPayments(targetPayments);
     setSharedNotice(null);
 
+    // Track last uploaded file
+    const uploadMeta: UploadActivityMeta = {
+      fileName: meta?.fileName || 'Instamart_Invoice_Report.xlsx',
+      fileType: 'invoice',
+      rowCount: newInvoices.length,
+      uploadedAt: new Date().toISOString()
+    };
+    setLastUpload(uploadMeta);
+    try { localStorage.setItem('instamart_last_upload', JSON.stringify(uploadMeta)); } catch {}
+
+    // Track last edit action
+    const editMeta: EditActivityMeta = {
+      action: 'added',
+      description: `${mode === 'replace' ? 'Imported' : 'Appended'} ${newInvoices.length} invoices from ${uploadMeta.fileName}`,
+      editedAt: new Date().toISOString()
+    };
+    setLastEdit(editMeta);
+    try { localStorage.setItem('instamart_last_edit', JSON.stringify(editMeta)); } catch {}
+
     // Immediate local cache
     saveInvoicesToStorage(targetInvoices, targetInvoices[0]?.vendorName, true);
     savePaymentsToStorage(targetPayments, true);
 
-    // Immediate Cloud Firestore push so other devices (Vercel, phone, PC) see data instantly
+    // Immediate Cloud Firestore push so other devices (phone, PC, laptop) see data instantly
     try {
-      await saveInvoicesToCloud(targetInvoices, targetInvoices[0]?.vendorName);
+      await saveInvoicesToCloud(targetInvoices, targetInvoices[0]?.vendorName, {
+        lastUpload: uploadMeta,
+        lastEdit: editMeta,
+        isReplace: mode === 'replace'
+      });
       if (targetPayments.length > 0) {
-        await savePaymentsToCloud(targetPayments);
+        await savePaymentsToCloud(targetPayments, {
+          lastUpload: uploadMeta,
+          lastEdit: editMeta,
+          isReplace: mode === 'replace'
+        });
       }
       setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
@@ -286,7 +394,11 @@ export default function App() {
   };
 
   // Handle uploaded payments
-  const handlePaymentsLoaded = async (newPayments: PaymentRecord[], mode: 'replace' | 'append') => {
+  const handlePaymentsLoaded = async (
+    newPayments: PaymentRecord[], 
+    mode: 'replace' | 'append',
+    meta?: { fileName: string; rowCount: number; fileType: 'invoice' | 'payment' }
+  ) => {
     setIsSyncing(true);
     let targetPayments: PaymentRecord[] = [];
     if (mode === 'replace') {
@@ -298,8 +410,29 @@ export default function App() {
     setPayments(targetPayments);
     savePaymentsToStorage(targetPayments, true);
 
+    const uploadMeta: UploadActivityMeta = {
+      fileName: meta?.fileName || 'Instamart_Payment_Report.xlsx',
+      fileType: 'payment',
+      rowCount: newPayments.length,
+      uploadedAt: new Date().toISOString()
+    };
+    setLastUpload(uploadMeta);
+    try { localStorage.setItem('instamart_last_upload', JSON.stringify(uploadMeta)); } catch {}
+
+    const editMeta: EditActivityMeta = {
+      action: 'added',
+      description: `Loaded ${newPayments.length} payment remittances from ${uploadMeta.fileName}`,
+      editedAt: new Date().toISOString()
+    };
+    setLastEdit(editMeta);
+    try { localStorage.setItem('instamart_last_edit', JSON.stringify(editMeta)); } catch {}
+
     try {
-      await savePaymentsToCloud(targetPayments);
+      await savePaymentsToCloud(targetPayments, {
+        lastUpload: uploadMeta,
+        lastEdit: editMeta,
+        isReplace: mode === 'replace'
+      });
       setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error('Failed to sync uploaded payments to cloud:', err);
@@ -394,11 +527,21 @@ export default function App() {
     setIsMarkPaidOpen(false);
     setInvoiceToMarkPaid(null);
 
+    // Track edit activity
+    const editMeta: EditActivityMeta = {
+      action: 'paid',
+      description: `Invoice ${invoiceToMarkPaid?.invoiceNumber || invoiceId} marked as Paid (${formatINR(paidAmount)})`,
+      invoiceNumber: invoiceToMarkPaid?.invoiceNumber || invoiceId,
+      editedAt: new Date().toISOString()
+    };
+    setLastEdit(editMeta);
+    try { localStorage.setItem('instamart_last_edit', JSON.stringify(editMeta)); } catch {}
+
     // Sync to Cloud Database immediately
     if (updatedTargetInvoice) {
-      updateSingleInvoiceInCloud(updatedTargetInvoice).catch(err => console.warn('Cloud invoice payment update notice:', err));
+      updateSingleInvoiceInCloud(updatedTargetInvoice, editMeta).catch(err => console.warn('Cloud invoice payment update notice:', err));
     }
-    savePaymentsToCloud(nextPayments).catch(err => console.warn('Cloud payments update notice:', err));
+    savePaymentsToCloud(nextPayments, { lastEdit: editMeta }).catch(err => console.warn('Cloud payments update notice:', err));
   };
 
   // Revert payment back to unpaid
@@ -423,13 +566,23 @@ export default function App() {
     setIsMarkPaidOpen(false);
     setInvoiceToMarkPaid(null);
 
+    const editMeta: EditActivityMeta = {
+      action: 'reverted',
+      description: `Invoice ${invoiceId} payment reverted to Unpaid`,
+      invoiceNumber: invoiceId,
+      editedAt: new Date().toISOString()
+    };
+    setLastEdit(editMeta);
+    try { localStorage.setItem('instamart_last_edit', JSON.stringify(editMeta)); } catch {}
+
     if (updatedTargetInvoice) {
-      updateSingleInvoiceInCloud(updatedTargetInvoice).catch(err => console.warn('Cloud revert invoice notice:', err));
+      updateSingleInvoiceInCloud(updatedTargetInvoice, editMeta).catch(err => console.warn('Cloud revert invoice notice:', err));
     }
   };
 
   // Save manual or edited invoice
   const handleSaveManualInvoice = (invoice: InvoiceRecord) => {
+    const isExisting = invoices.some(i => i.id === invoice.id);
     let nextInvoices = invoices;
     const idx = invoices.findIndex(i => i.id === invoice.id);
     if (idx >= 0) {
@@ -483,10 +636,21 @@ export default function App() {
     setIsAddInvoiceOpen(false);
     setInvoiceToEdit(null);
 
+    const editMeta: EditActivityMeta = {
+      action: isExisting ? 'edited' : 'added',
+      description: isExisting 
+        ? `Invoice ${invoice.invoiceNumber} details updated` 
+        : `New Invoice ${invoice.invoiceNumber} added (${formatINR(invoice.netPayableAmount)})`,
+      invoiceNumber: invoice.invoiceNumber,
+      editedAt: new Date().toISOString()
+    };
+    setLastEdit(editMeta);
+    try { localStorage.setItem('instamart_last_edit', JSON.stringify(editMeta)); } catch {}
+
     // Sync to Cloud Database immediately
-    updateSingleInvoiceInCloud(invoice).catch(err => console.warn('Cloud invoice save notice:', err));
+    updateSingleInvoiceInCloud(invoice, editMeta).catch(err => console.warn('Cloud invoice save notice:', err));
     if (invoice.paymentAmount > 0) {
-      savePaymentsToCloud(nextPayments).catch(err => console.warn('Cloud payment save notice:', err));
+      savePaymentsToCloud(nextPayments, { lastEdit: editMeta }).catch(err => console.warn('Cloud payment save notice:', err));
     }
   };
 
@@ -552,10 +716,34 @@ export default function App() {
         isSyncing={isSyncing}
         lastSyncTime={lastSyncTime}
         onManualSync={refreshFromCloud}
+        onToggleSidebar={toggleSidebar}
+        isSidebarOpen={isSidebarOpen}
       />
 
-      {/* Main Content Viewport - Full Screen Desktop Presentation */}
-      <main className="flex-1 w-full max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 py-5 space-y-5">
+      {/* Main Layout: Left Menubar Sidebar + Central Viewport */}
+      <div className="flex-1 flex w-full min-w-0">
+        <Sidebar
+          currentTab={currentTab}
+          onTabChange={setCurrentTab}
+          isOpen={isSidebarOpen}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          isMobileOpen={isMobileSidebarOpen}
+          onOpenUpload={() => setIsUploadOpen(true)}
+          onOpenAddInvoice={() => handleOpenAddInvoice()}
+          onOpenExport={() => setIsExportOpen(true)}
+          onOpenShare={() => setIsShareOpen(true)}
+          totalInvoices={invoices.length}
+          totalPayments={payments.length}
+          overdueCount={summary.totalOverdueCount}
+          isSyncing={isSyncing}
+          lastSyncTime={lastSyncTime}
+          vendorName={vendorName}
+        />
+
+        {/* Main Content Viewport - Full Screen Desktop Presentation with Mobile Padding for Bottom Nav */}
+        <main className="flex-1 min-w-0 w-full max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 py-5 space-y-5 pb-24 md:pb-6 overflow-x-hidden">
         
         {/* Shared Dataset Notification Banner */}
         {sharedNotice && hasData && (
@@ -681,6 +869,17 @@ export default function App() {
             {/* Tab 1: Dashboard View */}
             {currentTab === 'dashboard' && (
               <div className="space-y-5">
+                {/* Real-time Data Audit: Last Uploaded File & Last Edit Information */}
+                <RecentActivityCard
+                  lastUpload={lastUpload}
+                  lastEdit={lastEdit}
+                  totalInvoices={invoices.length}
+                  totalPayments={payments.length}
+                  lastSyncTime={lastSyncTime}
+                  onOpenUpload={() => setIsUploadOpen(true)}
+                  onOpenAddInvoice={() => handleOpenAddInvoice()}
+                />
+
                 <AnalyticsCharts
                   invoices={invoices}
                   summary={summary}
@@ -798,10 +997,22 @@ export default function App() {
           </>
         )}
 
-      </main>
+        </main>
+      </div>
+
+      {/* Mobile Bottom Navigation Bar (Dashboard, Invoice, Payment, Overdue, + Add) */}
+      <MobileBottomNav
+        currentTab={currentTab}
+        onTabChange={setCurrentTab}
+        onOpenAddInvoice={() => handleOpenAddInvoice()}
+        onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
+        totalInvoices={invoices.length}
+        totalPayments={payments.length}
+        overdueCount={summary.totalOverdueCount}
+      />
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-900 bg-white dark:bg-slate-950 py-4 px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500 transition-colors">
+      <footer className="border-t border-slate-200 dark:border-slate-900 bg-white dark:bg-slate-950 py-4 px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500 transition-colors hidden md:block">
         <p>Instamart Payment Tracker · Autonomous Vendor Finance & Reconciliation Engine</p>
       </footer>
 

@@ -127,9 +127,31 @@ export function sanitizePayment(pmt: Partial<PaymentRecord>, index = 0): Payment
  * Save all invoices to Firestore Cloud Database
  * Syncs both the collection documents (/invoices/{id}) and the active_ledger workspace doc
  */
+import { UploadActivityMeta, EditActivityMeta } from '../types';
+
+/**
+ * Test connectivity on boot per Firebase guidelines
+ */
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('Firestore notice: client offline, will sync when reconnected.');
+    }
+  }
+}
+testConnection().catch(() => {});
+
+/**
+ * Save all invoices to Firestore Cloud Database
+ * Syncs the /invoices collection documents FIRST, then updates active_ledger so other devices
+ * receive the update only after all documents are successfully persisted.
+ */
 export async function saveInvoicesToCloud(
   invoices: InvoiceRecord[], 
-  vendorName?: string
+  vendorName?: string,
+  meta?: { lastUpload?: UploadActivityMeta; lastEdit?: EditActivityMeta; isReplace?: boolean }
 ): Promise<{ success: boolean; count: number }> {
   await ensureAuth();
 
@@ -137,21 +159,19 @@ export async function saveInvoicesToCloud(
   const primaryVendor = vendorName || sanitized[0]?.vendorName || '';
 
   try {
-    // 1. Write to active_ledger metadata doc
-    const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
-    
-    // If under 150 invoices, also store array in active_ledger for instant single-document fetch
-    const payload: Record<string, any> = {
-      totalInvoices: sanitized.length,
-      vendorName: primaryVendor,
-      updatedAt: new Date().toISOString(),
-      version: Date.now()
-    };
-    if (sanitized.length <= 150) {
-      payload.invoices = sanitized;
+    // 1. If replace mode, clear existing invoices collection first
+    if (meta?.isReplace) {
+      try {
+        const existingDocs = await getDocs(collection(db, INVOICES_COLLECTION));
+        for (let i = 0; i < existingDocs.docs.length; i += 200) {
+          const batch = writeBatch(db);
+          existingDocs.docs.slice(i, i + 200).forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Replace mode previous docs cleanup warning:', err);
+      }
     }
-
-    await setDoc(activeDocRef, payload, { merge: true });
 
     // 2. Batch write all invoices into collection /invoices in chunks of 200
     const BATCH_SIZE = 200;
@@ -165,6 +185,23 @@ export async function saveInvoicesToCloud(
       await batch.commit();
     }
 
+    // 3. Update active_ledger workspace doc LAST to trigger onSnapshot listeners on other devices
+    const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
+    const payload: Record<string, any> = {
+      totalInvoices: sanitized.length,
+      vendorName: primaryVendor,
+      updatedAt: new Date().toISOString(),
+      version: Date.now()
+    };
+    if (meta?.lastUpload) {
+      payload.lastUpload = meta.lastUpload;
+    }
+    if (meta?.lastEdit) {
+      payload.lastEdit = meta.lastEdit;
+    }
+
+    await setDoc(activeDocRef, payload, { merge: true });
+
     console.log(`[Cloud Sync] Successfully persisted ${sanitized.length} invoices to Firestore.`);
     return { success: true, count: sanitized.length };
   } catch (err) {
@@ -176,22 +213,27 @@ export async function saveInvoicesToCloud(
 /**
  * Save all payments to Firestore Cloud Database
  */
-export async function savePaymentsToCloud(payments: PaymentRecord[]): Promise<{ success: boolean; count: number }> {
+export async function savePaymentsToCloud(
+  payments: PaymentRecord[],
+  meta?: { lastUpload?: UploadActivityMeta; lastEdit?: EditActivityMeta; isReplace?: boolean }
+): Promise<{ success: boolean; count: number }> {
   await ensureAuth();
 
   const sanitized = payments.map((p, idx) => sanitizePayment(p, idx));
 
   try {
-    const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
-    const payload: Record<string, any> = {
-      totalPayments: sanitized.length,
-      updatedAt: new Date().toISOString(),
-      version: Date.now()
-    };
-    if (sanitized.length <= 150) {
-      payload.payments = sanitized;
+    if (meta?.isReplace) {
+      try {
+        const existingDocs = await getDocs(collection(db, PAYMENTS_COLLECTION));
+        for (let i = 0; i < existingDocs.docs.length; i += 200) {
+          const batch = writeBatch(db);
+          existingDocs.docs.slice(i, i + 200).forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Replace mode previous payments cleanup warning:', err);
+      }
     }
-    await setDoc(activeDocRef, payload, { merge: true });
 
     const BATCH_SIZE = 200;
     for (let i = 0; i < sanitized.length; i += BATCH_SIZE) {
@@ -204,6 +246,20 @@ export async function savePaymentsToCloud(payments: PaymentRecord[]): Promise<{ 
       await batch.commit();
     }
 
+    const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
+    const payload: Record<string, any> = {
+      totalPayments: sanitized.length,
+      updatedAt: new Date().toISOString(),
+      version: Date.now()
+    };
+    if (meta?.lastUpload) {
+      payload.lastUpload = meta.lastUpload;
+    }
+    if (meta?.lastEdit) {
+      payload.lastEdit = meta.lastEdit;
+    }
+    await setDoc(activeDocRef, payload, { merge: true });
+
     console.log(`[Cloud Sync] Successfully persisted ${sanitized.length} payments to Firestore.`);
     return { success: true, count: sanitized.length };
   } catch (err) {
@@ -215,7 +271,10 @@ export async function savePaymentsToCloud(payments: PaymentRecord[]): Promise<{ 
 /**
  * Update or insert a single invoice in Firestore (used for Mark As Paid, Manual Add, or Edit)
  */
-export async function updateSingleInvoiceInCloud(invoice: InvoiceRecord): Promise<void> {
+export async function updateSingleInvoiceInCloud(
+  invoice: InvoiceRecord,
+  editMeta?: EditActivityMeta
+): Promise<void> {
   await ensureAuth();
   const sanitized = sanitizeInvoice(invoice);
   try {
@@ -224,10 +283,14 @@ export async function updateSingleInvoiceInCloud(invoice: InvoiceRecord): Promis
 
     // Touch active_ledger so other devices immediately detect change
     const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
-    await setDoc(activeDocRef, {
+    const updatePayload: Record<string, any> = {
       updatedAt: new Date().toISOString(),
       version: Date.now()
-    }, { merge: true });
+    };
+    if (editMeta) {
+      updatePayload.lastEdit = editMeta;
+    }
+    await setDoc(activeDocRef, updatePayload, { merge: true });
 
     console.log(`[Cloud Sync] Updated invoice ${sanitized.invoiceNumber} in Firestore.`);
   } catch (err) {
@@ -244,10 +307,11 @@ export async function loadDatasetFromCloud(): Promise<{
   payments: PaymentRecord[];
   vendorName?: string;
   lastUpdated?: string;
+  lastUpload?: UploadActivityMeta;
+  lastEdit?: EditActivityMeta;
 } | null> {
   await ensureAuth();
   try {
-    // 1. First check if documents exist in the dedicated collections
     const [invSnap, pmtSnap, activeDocSnap] = await Promise.all([
       getDocs(collection(db, INVOICES_COLLECTION)),
       getDocs(collection(db, PAYMENTS_COLLECTION)),
@@ -267,11 +331,15 @@ export async function loadDatasetFromCloud(): Promise<{
 
     let vendorName: string | undefined = undefined;
     let lastUpdated: string | undefined = undefined;
+    let lastUpload: UploadActivityMeta | undefined = undefined;
+    let lastEdit: EditActivityMeta | undefined = undefined;
 
     if (activeDocSnap.exists()) {
       const activeData = activeDocSnap.data();
       vendorName = activeData.vendorName;
       lastUpdated = activeData.updatedAt || activeData.lastUpdated;
+      lastUpload = activeData.lastUpload;
+      lastEdit = activeData.lastEdit;
 
       // Fallback: if collection was empty but active_ledger had array
       if (invoices.length === 0 && Array.isArray(activeData.invoices) && activeData.invoices.length > 0) {
@@ -288,7 +356,9 @@ export async function loadDatasetFromCloud(): Promise<{
         invoices,
         payments,
         vendorName: vendorName || invoices[0]?.vendorName || '',
-        lastUpdated
+        lastUpdated,
+        lastUpload,
+        lastEdit
       };
     }
   } catch (err) {
@@ -303,7 +373,13 @@ export async function loadDatasetFromCloud(): Promise<{
  * Device B's onSnapshot triggers immediately and updates its UI!
  */
 export function subscribeToCloudLedger(
-  onUpdate: (data: { invoices: InvoiceRecord[]; payments: PaymentRecord[]; vendorName?: string }) => void
+  onUpdate: (data: { 
+    invoices: InvoiceRecord[]; 
+    payments: PaymentRecord[]; 
+    vendorName?: string;
+    lastUpload?: UploadActivityMeta;
+    lastEdit?: EditActivityMeta;
+  }) => void
 ): () => void {
   const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
 
@@ -314,31 +390,16 @@ export function subscribeToCloudLedger(
       const data = snap.data();
       const currentVersion = Number(data.version) || 0;
 
-      // Avoid infinite loop if this was our own write
+      // Avoid redundant work if this was our own write
       if (currentVersion !== 0 && currentVersion === lastKnownVersion) {
         return;
       }
       lastKnownVersion = currentVersion;
 
-      // If invoices are embedded in snapshot, use them immediately
-      if (Array.isArray(data.invoices) && data.invoices.length > 0) {
-        const sanitizedInvoices = data.invoices.map((i: any, idx: number) => sanitizeInvoice(i, idx));
-        const sanitizedPayments = Array.isArray(data.payments) 
-          ? data.payments.map((p: any, idx: number) => sanitizePayment(p, idx))
-          : [];
-
-        onUpdate({
-          invoices: sanitizedInvoices,
-          payments: sanitizedPayments,
-          vendorName: data.vendorName
-        });
-        return;
-      }
-
-      // Otherwise fetch the collection
+      // Fetch the updated collection from cloud
       try {
         const fullDataset = await loadDatasetFromCloud();
-        if (fullDataset && (fullDataset.invoices.length > 0 || fullDataset.payments.length > 0)) {
+        if (fullDataset) {
           onUpdate(fullDataset);
         }
       } catch (err) {

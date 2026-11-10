@@ -44,6 +44,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           runtimeCaching: [
             {
@@ -89,6 +90,16 @@ export default defineConfig(() => {
     },
     build: {
       chunkSizeWarningLimit: 1500,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules/xlsx')) return 'xlsx';
+            if (id.includes('node_modules/jspdf')) return 'pdf';
+            if (id.includes('node_modules/firebase')) return 'firebase';
+            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) return 'vendor';
+          },
+        },
+      },
     },
     server: {
       host: '0.0.0.0',
