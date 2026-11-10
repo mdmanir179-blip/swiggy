@@ -14,10 +14,7 @@ import {
   ChevronRight, 
   Cloud,
   X,
-  FileCheck2,
-  AlertTriangle
 } from 'lucide-react';
-import { InstamartLogo } from './InstamartLogo';
 
 interface SidebarProps {
   currentTab: ViewTab;
@@ -133,18 +130,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         `}
       >
         {/* Top Header / Brand in Sidebar */}
-        <div className="p-3 sm:p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <InstamartLogo className="w-8 h-8 shrink-0" size={32} />
-            {(!isCollapsed || isMobileOpen) && (
+        <div className="p-3.5 sm:p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {(!isCollapsed || isMobileOpen) ? (
               <div className="min-w-0">
-                <span className="font-bold text-sm text-slate-900 dark:text-white truncate block">
+                <span className="font-bold text-base text-slate-900 dark:text-white truncate block tracking-tight">
                   Instamart
                 </span>
-                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wider block">
+                <span className="text-[10px] text-amber-600 dark:text-amber-500 font-semibold uppercase tracking-wider block">
                   Vendor Portal
                 </span>
               </div>
+            ) : (
+              <span className="w-8 h-8 rounded-lg bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                IM
+              </span>
             )}
           </div>
 

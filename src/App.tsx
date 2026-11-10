@@ -34,7 +34,6 @@ import { ShareModal } from './components/ShareModal';
 import { ClearDataModal } from './components/ClearDataModal';
 import { PrintStatement } from './components/PrintStatement';
 import { OfflineIndicator } from './components/OfflineIndicator';
-import { InstamartLogo } from './components/InstamartLogo';
 import { MarkAsPaidModal } from './components/MarkAsPaidModal';
 import { AddInvoiceModal } from './components/AddInvoiceModal';
 import { 
@@ -717,6 +716,7 @@ export default function App() {
         lastSyncTime={lastSyncTime}
         onManualSync={refreshFromCloud}
         onToggleSidebar={toggleSidebar}
+        onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
         isSidebarOpen={isSidebarOpen}
       />
 
@@ -799,9 +799,10 @@ export default function App() {
         {!hasData ? (
           <div className="max-w-3xl mx-auto my-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 sm:p-12 text-center shadow-lg transition-colors">
             
-            {/* New Logo Vector */}
             <div className="flex justify-center mb-5">
-              <InstamartLogo className="w-16 h-16" size={64} />
+              <div className="w-16 h-16 rounded-2xl bg-amber-400/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-inner">
+                <FileSpreadsheet className="w-8 h-8" />
+              </div>
             </div>
 
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight mb-2">
