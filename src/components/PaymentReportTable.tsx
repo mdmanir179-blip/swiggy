@@ -3,6 +3,7 @@ import { PaymentRecord, InvoiceRecord } from '../types';
 import { formatINR } from '../utils/currency';
 import { Search, CreditCard, ArrowDownRight, CheckCircle2, ShieldCheck, Download, X } from 'lucide-react';
 import { exportPaymentsToExcel } from '../utils/exporter';
+import { parseDateForSort } from '../utils/dateFormatter';
 
 interface PaymentReportTableProps {
   payments: PaymentRecord[];
@@ -32,25 +33,33 @@ export const PaymentReportTable: React.FC<PaymentReportTableProps> = ({
     return { gross, reversals, net, count: payments.length };
   }, [payments]);
 
-  // Enhanced Filter: UTR, Date, Vendor Name, Linked Invoice, Payment Number
+  // Enhanced Filter & Sort: latest payment date first
   const filteredPayments = useMemo(() => {
-    if (!searchQuery.trim()) return payments;
-    const q = searchQuery.toLowerCase().trim();
-    return payments.filter(p => {
-      const matchUtr = p.paymentReferenceNo && p.paymentReferenceNo.toLowerCase().includes(q);
-      const matchDate = p.paymentDate && p.paymentDate.toLowerCase().includes(q);
-      const matchVendor = (p.vendorName && p.vendorName.toLowerCase().includes(q)) || (p.vendorCode && p.vendorCode.toLowerCase().includes(q));
-      const matchPayNum = p.paymentNumber && p.paymentNumber.toLowerCase().includes(q);
-      const matchType = p.paymentType && p.paymentType.toLowerCase().includes(q);
-      const matchInvoices = p.linkedInvoices && p.linkedInvoices.some(inv => inv.toLowerCase().includes(q));
+    let list = payments;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = payments.filter(p => {
+        const matchUtr = p.paymentReferenceNo && p.paymentReferenceNo.toLowerCase().includes(q);
+        const matchDate = p.paymentDate && p.paymentDate.toLowerCase().includes(q);
+        const matchVendor = (p.vendorName && p.vendorName.toLowerCase().includes(q)) || (p.vendorCode && p.vendorCode.toLowerCase().includes(q));
+        const matchPayNum = p.paymentNumber && p.paymentNumber.toLowerCase().includes(q);
+        const matchType = p.paymentType && p.paymentType.toLowerCase().includes(q);
+        const matchInvoices = p.linkedInvoices && p.linkedInvoices.some(inv => inv.toLowerCase().includes(q));
 
-      // Also check if any warehouse matches linked invoices
-      const matchWarehouse = invoices.some(inv => 
-        (inv.warehouseName && inv.warehouseName.toLowerCase().includes(q)) &&
-        p.linkedInvoices && p.linkedInvoices.includes(inv.invoiceNumber)
-      );
+        // Also check if any warehouse matches linked invoices
+        const matchWarehouse = invoices.some(inv => 
+          (inv.warehouseName && inv.warehouseName.toLowerCase().includes(q)) &&
+          p.linkedInvoices && p.linkedInvoices.includes(inv.invoiceNumber)
+        );
 
-      return matchUtr || matchDate || matchVendor || matchPayNum || matchType || matchInvoices || matchWarehouse;
+        return matchUtr || matchDate || matchVendor || matchPayNum || matchType || matchInvoices || matchWarehouse;
+      });
+    }
+
+    return [...list].sort((a, b) => {
+      const timeA = parseDateForSort(a.paymentDate);
+      const timeB = parseDateForSort(b.paymentDate);
+      return timeB - timeA;
     });
   }, [payments, invoices, searchQuery]);
 

@@ -176,3 +176,37 @@ export function extractDateFromGrnNo(grnNumber: string): string {
   }
   return '';
 }
+
+/**
+ * Helper to reliably parse various date formats (DD-MM-YYYY, YYYY-MM-DD, etc.) into numeric timestamps for sorting.
+ * Returns 0 if missing, blank, or invalid.
+ */
+export function parseDateForSort(dateStr?: string | null): number {
+  if (!dateStr) return 0;
+  const s = String(dateStr).trim();
+  if (!s || s === '—' || s === '-' || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') {
+    return 0;
+  }
+
+  // Format 1: DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+  const dmy = s.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})/);
+  if (dmy) {
+    const day = parseInt(dmy[1], 10);
+    const month = parseInt(dmy[2], 10) - 1;
+    const year = parseInt(dmy[3], 10);
+    return new Date(Date.UTC(year, month, day)).getTime();
+  }
+
+  // Format 2: YYYY-MM-DD or YYYY/MM/DD
+  const ymd = s.match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
+  if (ymd) {
+    const year = parseInt(ymd[1], 10);
+    const month = parseInt(ymd[2], 10) - 1;
+    const day = parseInt(ymd[3], 10);
+    return new Date(Date.UTC(year, month, day)).getTime();
+  }
+
+  const parsed = Date.parse(s);
+  return isNaN(parsed) ? 0 : parsed;
+}
+

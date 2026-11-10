@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { InvoiceRecord, FinancialSummary, PaymentRecord } from '../types';
 import { formatINR } from '../utils/currency';
+import { parseDateForSort } from '../utils/pdfGenerator';
 
 interface PrintStatementProps {
   invoices: InvoiceRecord[];
@@ -13,7 +14,30 @@ export const PrintStatement: React.FC<PrintStatementProps> = ({
   payments,
   summary
 }) => {
-  const sampleInv = invoices[0] || {} as InvoiceRecord;
+  const sortedInvoices = useMemo(() => {
+    return [...invoices].sort((a, b) => {
+      const timeA = parseDateForSort(a.lastPaymentDate);
+      const timeB = parseDateForSort(b.lastPaymentDate);
+
+      if (timeA > 0 && timeB > 0) {
+        if (timeB !== timeA) return timeB - timeA;
+        const invDateA = parseDateForSort(a.invoiceAccountingDate);
+        const invDateB = parseDateForSort(b.invoiceAccountingDate);
+        if (invDateB !== invDateA) return invDateB - invDateA;
+        return (b.invoiceNumber || '').localeCompare(a.invoiceNumber || '');
+      }
+
+      if (timeA > 0 && timeB === 0) return -1;
+      if (timeB > 0 && timeA === 0) return 1;
+
+      const invDateA = parseDateForSort(a.invoiceAccountingDate);
+      const invDateB = parseDateForSort(b.invoiceAccountingDate);
+      if (invDateB !== invDateA) return invDateB - invDateA;
+      return (b.invoiceNumber || '').localeCompare(a.invoiceNumber || '');
+    });
+  }, [invoices]);
+
+  const sampleInv = sortedInvoices[0] || {} as InvoiceRecord;
 
   return (
     <div className="hidden print:block p-8 bg-white text-slate-900 text-xs font-sans">
@@ -89,7 +113,7 @@ export const PrintStatement: React.FC<PrintStatementProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 font-mono">
-            {invoices.map((inv) => (
+            {sortedInvoices.map((inv) => (
               <tr key={inv.id}>
                 <td className="py-1 px-2 font-semibold">{inv.invoiceNumber}</td>
                 <td className="py-1 px-2">{inv.invoiceAccountingDate}</td>

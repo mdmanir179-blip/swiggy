@@ -3,6 +3,39 @@ import autoTable from 'jspdf-autotable';
 import { InvoiceRecord, FinancialSummary, PaymentRecord } from '../types';
 import { formatINR } from './currency';
 
+/**
+ * Helper to reliably parse various date formats (DD-MM-YYYY, YYYY-MM-DD, etc.) into numeric timestamps for sorting.
+ * Returns 0 if missing, blank, or invalid.
+ */
+export function parseDateForSort(dateStr?: string | null): number {
+  if (!dateStr) return 0;
+  const s = String(dateStr).trim();
+  if (!s || s === '—' || s === '-' || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') {
+    return 0;
+  }
+
+  // Format 1: DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+  const dmy = s.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})/);
+  if (dmy) {
+    const day = parseInt(dmy[1], 10);
+    const month = parseInt(dmy[2], 10) - 1;
+    const year = parseInt(dmy[3], 10);
+    return new Date(Date.UTC(year, month, day)).getTime();
+  }
+
+  // Format 2: YYYY-MM-DD or YYYY/MM/DD
+  const ymd = s.match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
+  if (ymd) {
+    const year = parseInt(ymd[1], 10);
+    const month = parseInt(ymd[2], 10) - 1;
+    const day = parseInt(ymd[3], 10);
+    return new Date(Date.UTC(year, month, day)).getTime();
+  }
+
+  const parsed = Date.parse(s);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 export function generateInvoiceReportPDF(
   invoices: InvoiceRecord[],
   summary: FinancialSummary,
@@ -31,12 +64,12 @@ export function generateInvoiceReportPDF(
   doc.setTextColor(15, 23, 42); // slate-900
   doc.text('INSTAMART VENDOR PAYMENT STATEMENT (SHEET 1)', 40, 42);
 
-  // Subtitle & Metadata
-  doc.setFontSize(9);
+  // Subtitle & Metadata: Explicitly note sorting by Last Payment Date (latest first)
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139);
   doc.text(
-    `Generated on: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}  |  Currency: Indian Rupee (INR - Rs.)  |  Total Invoices: ${invoices.length}`,
+    `Generated on: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}  |  Currency: Indian Rupee (INR - Rs.)  |  Sorted: Latest Payment Date First  |  Total Invoices: ${invoices.length}`,
     40,
     58
   );
@@ -139,8 +172,34 @@ export function generateInvoiceReportPDF(
     tableStartY = 220;
   }
 
-  // 4. Invoices Table Rows with "Last Payment Date" prominently included!
-  const tableData = invoices.map(inv => [
+  // 4. Sort invoices so payments done last (most recent Last Payment Date) appear from the FIRST row of the PDF!
+  const sortedInvoices = [...invoices].sort((a, b) => {
+    const timeA = parseDateForSort(a.lastPaymentDate);
+    const timeB = parseDateForSort(b.lastPaymentDate);
+
+    // If both invoices have a Last Payment Date, sort newest first (descending)
+    if (timeA > 0 && timeB > 0) {
+      if (timeB !== timeA) return timeB - timeA;
+      // Secondary sort: invoice accounting date (newest first)
+      const invDateA = parseDateForSort(a.invoiceAccountingDate);
+      const invDateB = parseDateForSort(b.invoiceAccountingDate);
+      if (invDateB !== invDateA) return invDateB - invDateA;
+      return (b.invoiceNumber || '').localeCompare(a.invoiceNumber || '');
+    }
+
+    // Invoices with Last Payment Date come first in the statement rows
+    if (timeA > 0 && timeB === 0) return -1;
+    if (timeB > 0 && timeA === 0) return 1;
+
+    // For invoices awaiting payment / without last payment date, sort by invoice date descending
+    const invDateA = parseDateForSort(a.invoiceAccountingDate);
+    const invDateB = parseDateForSort(b.invoiceAccountingDate);
+    if (invDateB !== invDateA) return invDateB - invDateA;
+    return (b.invoiceNumber || '').localeCompare(a.invoiceNumber || '');
+  });
+
+  // Table Rows mapped from sortedInvoices
+  const tableData = sortedInvoices.map(inv => [
     inv.invoiceNumber,
     inv.invoiceAccountingDate || '—',
     inv.warehouseName || 'Direct',

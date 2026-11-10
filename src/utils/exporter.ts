@@ -1,12 +1,31 @@
 import * as XLSX from 'xlsx';
 import { InvoiceRecord, PaymentRecord, FinancialSummary } from '../types';
 import { formatINR } from './currency';
+import { parseDateForSort } from './dateFormatter';
 
 /**
  * Export filtered invoices to Excel (.xlsx) with all 34 columns
  */
 export function exportInvoicesToExcel(invoices: InvoiceRecord[], fileName: string = 'Instamart_Invoice_Report.xlsx') {
-  const exportData = invoices.map(inv => ({
+  const sortedInvoices = [...invoices].sort((a, b) => {
+    const timeA = parseDateForSort(a.lastPaymentDate);
+    const timeB = parseDateForSort(b.lastPaymentDate);
+    if (timeA > 0 && timeB > 0) {
+      if (timeB !== timeA) return timeB - timeA;
+      const invDateA = parseDateForSort(a.invoiceAccountingDate);
+      const invDateB = parseDateForSort(b.invoiceAccountingDate);
+      if (invDateB !== invDateA) return invDateB - invDateA;
+      return (b.invoiceNumber || '').localeCompare(a.invoiceNumber || '');
+    }
+    if (timeA > 0 && timeB === 0) return -1;
+    if (timeB > 0 && timeA === 0) return 1;
+    const invDateA = parseDateForSort(a.invoiceAccountingDate);
+    const invDateB = parseDateForSort(b.invoiceAccountingDate);
+    if (invDateB !== invDateA) return invDateB - invDateA;
+    return (b.invoiceNumber || '').localeCompare(a.invoiceNumber || '');
+  });
+
+  const exportData = sortedInvoices.map(inv => ({
     'Organization Name': inv.organizationName,
     'Vendor Name': inv.vendorName,
     'Vendor Code': inv.vendorCode,
@@ -53,7 +72,11 @@ export function exportInvoicesToExcel(invoices: InvoiceRecord[], fileName: strin
  * Export payments to Excel (.xlsx) matching Point 2 schema
  */
 export function exportPaymentsToExcel(payments: PaymentRecord[], fileName: string = 'Instamart_Payment_Report.xlsx') {
-  const exportData = payments.map(p => ({
+  const sortedPayments = [...payments].sort((a, b) => {
+    return parseDateForSort(b.paymentDate) - parseDateForSort(a.paymentDate);
+  });
+
+  const exportData = sortedPayments.map(p => ({
     'Organization Name': p.organizationName,
     'Vendor Name': p.vendorName,
     'Vendor Code': p.vendorCode,

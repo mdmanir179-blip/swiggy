@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { InvoiceRecord } from '../types';
 import { formatINR } from '../utils/currency';
+import { parseDateForSort } from '../utils/dateFormatter';
 import { 
   Search, 
   ArrowUpDown, 
@@ -56,7 +57,7 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [warehouseFilter, setWarehouseFilter] = useState<string>(selectedWarehouse || 'All');
-  const [sortField, setSortField] = useState<SortField>('invoiceAccountingDate');
+  const [sortField, setSortField] = useState<SortField>('lastPaymentDate');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
@@ -132,6 +133,38 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
 
       return true;
     }).sort((a, b) => {
+      // Date fields comparison using real calendar timestamps
+      if (
+        sortField === 'lastPaymentDate' || 
+        sortField === 'invoiceAccountingDate' || 
+        sortField === 'dueDate' || 
+        sortField === 'grnDate'
+      ) {
+        const timeA = parseDateForSort(a[sortField]);
+        const timeB = parseDateForSort(b[sortField]);
+
+        if (timeA > 0 && timeB > 0) {
+          if (timeB !== timeA) {
+            return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+          }
+          // Secondary fallback: invoice accounting date (newest first)
+          const invDateA = parseDateForSort(a.invoiceAccountingDate);
+          const invDateB = parseDateForSort(b.invoiceAccountingDate);
+          if (invDateB !== invDateA) return invDateB - invDateA;
+          return (b.invoiceNumber || '').localeCompare(a.invoiceNumber || '');
+        }
+
+        // When descending, invoices with dates come first (at the top rows)
+        if (timeA > 0 && timeB === 0) return sortOrder === 'asc' ? 1 : -1;
+        if (timeB > 0 && timeA === 0) return sortOrder === 'asc' ? -1 : 1;
+
+        // Both missing: secondary sort by invoice accounting date descending
+        const invDateA = parseDateForSort(a.invoiceAccountingDate);
+        const invDateB = parseDateForSort(b.invoiceAccountingDate);
+        if (invDateB !== invDateA) return invDateB - invDateA;
+        return (b.invoiceNumber || '').localeCompare(a.invoiceNumber || '');
+      }
+
       let aVal = a[sortField];
       let bVal = b[sortField];
 
@@ -398,12 +431,14 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
               <th className="py-3 px-3 font-semibold whitespace-nowrap">
                 <button 
                   onClick={() => handleSort('lastPaymentDate')} 
-                  className="flex items-center gap-1 hover:text-slate-900 dark:hover:text-white"
-                  title="Last Payment / Remittance Date"
+                  className={`flex items-center gap-1 hover:text-slate-900 dark:hover:text-white ${
+                    sortField === 'lastPaymentDate' ? 'text-amber-600 dark:text-amber-400 font-bold' : ''
+                  }`}
+                  title="Last Payment / Remittance Date (Click to change sort)"
                 >
                   <Calendar className="w-3.5 h-3.5 text-emerald-500" />
                   <span>Last Payment Date</span>
-                  <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                  <ArrowUpDown className={`w-3 h-3 ${sortField === 'lastPaymentDate' ? 'text-amber-500' : 'text-slate-400'}`} />
                 </button>
               </th>
 
