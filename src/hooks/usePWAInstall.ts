@@ -11,6 +11,20 @@ declare global {
   }
 }
 
+const PWA_INSTALLED_STORAGE_KEY = 'instamart_pwa_installed';
+
+function checkStandaloneMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+    window.matchMedia('(display-mode: minimal-ui)').matches ||
+    window.matchMedia('(display-mode: fullscreen)').matches ||
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+    document.referrer.startsWith('android-app://')
+  );
+}
+
 export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(() => {
     if (typeof window !== 'undefined' && window.__deferredPWAInstallPrompt) {
@@ -18,15 +32,43 @@ export function usePWAInstall() {
     }
     return null;
   });
-  const [isInstalled, setIsInstalled] = useState(false);
+
+  const [isInstalled, setIsInstalled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    if (checkStandaloneMode()) return true;
+    // If browser already fired beforeinstallprompt, app is not installed
+    if (window.__deferredPWAInstallPrompt) return false;
+    try {
+      return localStorage.getItem(PWA_INSTALLED_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    // Detect standalone mode (already installed or running as PWA)
-    const isStandalone =
-      (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches) ||
-      (typeof window !== 'undefined' && (window.navigator as unknown as { standalone?: boolean }).standalone === true);
-    setIsInstalled(isStandalone);
+    const standalone = checkStandaloneMode();
+    if (standalone) {
+      setIsInstalled(true);
+    }
+
+    // Check installed related apps API when supported (Chrome/Edge/Android)
+    const nav = window.navigator as Navigator & {
+      getInstalledRelatedApps?: () => Promise<Array<{ platform?: string; url?: string; id?: string }>>;
+    };
+    if (typeof nav.getInstalledRelatedApps === 'function') {
+      nav.getInstalledRelatedApps()
+        .then((apps) => {
+          if (Array.isArray(apps) && apps.length > 0) {
+            setIsInstalled(true);
+            try {
+              localStorage.setItem(PWA_INSTALLED_STORAGE_KEY, 'true');
+            } catch {}
+          }
+        })
+        .catch(() => {});
+    }
 
     // Detect iOS devices (iPhone, iPad, iPod)
     if (typeof window !== 'undefined') {
@@ -37,6 +79,9 @@ export function usePWAInstall() {
 
     if (typeof window !== 'undefined' && window.__deferredPWAInstallPrompt) {
       setDeferredPrompt(window.__deferredPWAInstallPrompt);
+      if (!standalone) {
+        setIsInstalled(false);
+      }
     }
 
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -44,30 +89,56 @@ export function usePWAInstall() {
       const promptEvent = e as BeforeInstallPromptEvent;
       window.__deferredPWAInstallPrompt = promptEvent;
       setDeferredPrompt(promptEvent);
+      // Browser fired install prompt, so app is not currently installed
+      try {
+        localStorage.removeItem(PWA_INSTALLED_STORAGE_KEY);
+      } catch {}
+      if (!checkStandaloneMode()) {
+        setIsInstalled(false);
+      }
     };
 
-    const handleCustomPromptReady = (e: any) => {
-      if (e.detail) {
-        setDeferredPrompt(e.detail as BeforeInstallPromptEvent);
+    const handleCustomPromptReady = (e: Event) => {
+      const customEvent = e as CustomEvent<BeforeInstallPromptEvent>;
+      if (customEvent.detail) {
+        setDeferredPrompt(customEvent.detail);
+        try {
+          localStorage.removeItem(PWA_INSTALLED_STORAGE_KEY);
+        } catch {}
+        if (!checkStandaloneMode()) {
+          setIsInstalled(false);
+        }
       }
     };
 
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
+      try {
+        localStorage.setItem(PWA_INSTALLED_STORAGE_KEY, 'true');
+      } catch {}
       if (typeof window !== 'undefined') {
         window.__deferredPWAInstallPrompt = null;
+      }
+    };
+
+    const standaloneMedia = window.matchMedia('(display-mode: standalone)');
+    const handleDisplayModeChange = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        setIsInstalled(true);
       }
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('pwa-prompt-ready', handleCustomPromptReady);
     window.addEventListener('appinstalled', handleAppInstalled);
+    standaloneMedia.addEventListener('change', handleDisplayModeChange);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('pwa-prompt-ready', handleCustomPromptReady);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      standaloneMedia.removeEventListener('change', handleDisplayModeChange);
     };
   }, []);
 
@@ -81,6 +152,9 @@ export function usePWAInstall() {
       if (outcome === 'accepted') {
         setIsInstalled(true);
         setDeferredPrompt(null);
+        try {
+          localStorage.setItem(PWA_INSTALLED_STORAGE_KEY, 'true');
+        } catch {}
         if (typeof window !== 'undefined') {
           window.__deferredPWAInstallPrompt = null;
         }

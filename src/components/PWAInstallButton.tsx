@@ -2,13 +2,17 @@ import React, { useState } from 'react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { Download, Monitor, Smartphone, X, Share, CheckCircle2, Laptop } from 'lucide-react';
 
-export const PWAInstallButton: React.FC = () => {
+interface PWAInstallButtonProps {
+  variant?: 'header' | 'sidebar' | 'sidebar-collapsed';
+}
+
+export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ variant = 'header' }) => {
   // CRITICAL: All React hooks declared unconditionally at top
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [showDesktopGuide, setShowDesktopGuide] = useState(false);
 
-  // If already running as an installed desktop or mobile PWA, hide the button
+  // If already running or installed on this device, hide the button
   if (isInstalled) {
     return null;
   }
@@ -28,15 +32,34 @@ export const PWAInstallButton: React.FC = () => {
 
   return (
     <>
-      {/* Primary Install App Button in Header */}
-      <button
-        onClick={handleInstallClick}
-        className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-amber-950 bg-amber-400 hover:bg-amber-300 dark:bg-amber-400 dark:hover:bg-amber-300 rounded-lg transition-colors whitespace-nowrap shadow-xs cursor-pointer select-none"
-        title="Install Instamart Payment Tracker as a computer desktop application"
-      >
-        <Download className="w-3.5 h-3.5 shrink-0" />
-        <span className="hidden sm:inline">Install App</span>
-      </button>
+      {variant === 'sidebar-collapsed' ? (
+        <button
+          onClick={handleInstallClick}
+          className="p-2 text-amber-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-xs cursor-pointer"
+          title="Install App"
+          aria-label="Install App"
+        >
+          <Download className="w-4 h-4 shrink-0" />
+        </button>
+      ) : variant === 'sidebar' ? (
+        <button
+          onClick={handleInstallClick}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-amber-950 bg-amber-400 hover:bg-amber-300 rounded-xl transition-colors shadow-xs cursor-pointer select-none"
+          title="Install Instamart Payment Tracker on this device"
+        >
+          <Download className="w-4 h-4 shrink-0" />
+          <span>Install App</span>
+        </button>
+      ) : (
+        <button
+          onClick={handleInstallClick}
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-amber-950 bg-amber-400 hover:bg-amber-300 dark:bg-amber-400 dark:hover:bg-amber-300 rounded-lg transition-colors whitespace-nowrap shadow-xs cursor-pointer select-none"
+          title="Install Instamart Payment Tracker as a computer desktop application"
+        >
+          <Download className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden sm:inline">Install App</span>
+        </button>
+      )}
 
       {/* Desktop Computer Installation Modal Guide */}
       {showDesktopGuide && (

@@ -1,21 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { ViewTab } from '../types';
 import { 
-  Upload, 
-  Download, 
   Sun, 
   Moon,
   Trash2,
-  Share2, 
   Maximize2, 
   Minimize2, 
-  PlusCircle, 
-  Cloud, 
-  RefreshCw, 
   PanelLeft,
-  Menu
+  Menu,
+  Search,
+  X
 } from 'lucide-react';
-import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   currentTab?: ViewTab;
@@ -36,6 +31,8 @@ interface HeaderProps {
   onToggleSidebar?: () => void;
   onOpenMobileSidebar?: () => void;
   isSidebarOpen?: boolean;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -56,7 +53,9 @@ export const Header: React.FC<HeaderProps> = ({
   onManualSync,
   onToggleSidebar,
   onOpenMobileSidebar,
-  isSidebarOpen = true
+  isSidebarOpen = true,
+  searchQuery = '',
+  onSearchChange
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -127,28 +126,41 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
+          {/* Center Search Bar (Desktop lg+) */}
+          {onSearchChange && (
+            <div className="hidden lg:flex flex-1 max-w-md mx-2 min-w-0">
+              <div className="relative w-full">
+                <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape' && searchQuery) {
+                      onSearchChange('');
+                    }
+                  }}
+                  placeholder="Search PO No. or Invoice No..."
+                  aria-label="Search PO or Invoice number"
+                  className="w-full pl-9 pr-8 py-1.5 text-xs sm:text-sm bg-slate-100/90 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400/70 focus:border-amber-400 dark:focus:border-amber-500 transition-all font-mono"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => onSearchChange('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded transition-colors"
+                    title="Clear search (Esc)"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Primary Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Real-time Multi-Device Cloud Sync Status Indicator */}
-            {onManualSync && (
-              <button
-                onClick={onManualSync}
-                disabled={isSyncing}
-                title={lastSyncTime ? `Cloud Database Connected. Last synced: ${lastSyncTime}. Click to refresh.` : 'Cloud Database Connected. Click to refresh across devices.'}
-                className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-all bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/80 shadow-xs"
-              >
-                <span className="relative flex h-2 w-2">
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isSyncing ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
-                  <span className={`relative inline-flex rounded-full h-2 w-2 ${isSyncing ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
-                </span>
-                <Cloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span className="hidden sm:inline font-mono text-[11px]">
-                  {isSyncing ? 'Syncing...' : 'Cloud Synced'}
-                </span>
-                <RefreshCw className={`w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
-              </button>
-            )}
-
             {/* Computer Full Screen Toggle - Desktop Only */}
             <button
               onClick={toggleFullscreen}
@@ -166,11 +178,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <Maximize2 className="w-4 h-4" />
               )}
             </button>
-
-            {/* PWA Save & Install Button - Desktop Only */}
-            <div className="hidden sm:block">
-              <PWAInstallButton />
-            </div>
 
             {/* Theme Toggle (Light / Dark) */}
             <button
@@ -197,50 +204,42 @@ export const Header: React.FC<HeaderProps> = ({
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
-
-            {/* Add Invoice Button - Visible across all viewports */}
-            <button
-              onClick={onOpenAddInvoice}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-200 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 rounded-lg transition-colors whitespace-nowrap shadow-xs"
-              title="Manually enter or create a new invoice"
-            >
-              <PlusCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span className="hidden xs:inline sm:inline">+ Add Invoice</span>
-              <span className="xs:hidden sm:hidden">+ Add</span>
-            </button>
-
-            {/* Upload Button */}
-            <button
-              onClick={onOpenUpload}
-              className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors whitespace-nowrap"
-            >
-              <Upload className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
-              <span className="hidden md:inline">Upload</span>
-            </button>
-
-            {/* Share Link Button - Desktop Only */}
-            <button
-              onClick={onOpenShare}
-              disabled={totalInvoices === 0 && totalPayments === 0}
-              title={totalInvoices === 0 ? 'Upload data first to generate share link' : 'Share uploaded data via web link'}
-              className="hidden md:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-sky-800 dark:text-sky-200 bg-sky-100 hover:bg-sky-200 dark:bg-sky-950/70 dark:hover:bg-sky-900 border border-sky-300 dark:border-sky-800/80 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors whitespace-nowrap"
-            >
-              <Share2 className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-              <span>Share</span>
-            </button>
-
-            {/* Export Button - Desktop Only */}
-            <button
-              onClick={onOpenExport}
-              disabled={totalInvoices === 0}
-              className="hidden md:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors whitespace-nowrap shadow-xs"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export</span>
-            </button>
           </div>
 
         </div>
+
+        {/* Mobile & Tablet Header Search Bar (< lg) */}
+        {onSearchChange && (
+          <div className="lg:hidden pb-2.5">
+            <div className="relative w-full">
+              <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape' && searchQuery) {
+                    onSearchChange('');
+                  }
+                }}
+                placeholder="Search PO No. or Invoice No..."
+                aria-label="Search PO or Invoice number"
+                className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-100/90 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400/70 focus:border-amber-400 dark:focus:border-amber-500 transition-all font-mono"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => onSearchChange('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded transition-colors"
+                  title="Clear search"
+                  aria-label="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );

@@ -36,6 +36,7 @@ import { PrintStatement } from './components/PrintStatement';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { MarkAsPaidModal } from './components/MarkAsPaidModal';
 import { AddInvoiceModal } from './components/AddInvoiceModal';
+import { SearchedPODetails } from './components/SearchedPODetails';
 import { 
   Upload, 
   FileSpreadsheet, 
@@ -299,6 +300,12 @@ export default function App() {
   }, []);
 
   const [currentTab, setCurrentTab] = useState<ViewTab>('dashboard');
+  const [headerSearchQuery, setHeaderSearchQuery] = useState('');
+
+  const handleTabChange = (tab: ViewTab) => {
+    setHeaderSearchQuery('');
+    setCurrentTab(tab);
+  };
   
   // Interactive filters & modals
   const [selectedWarehouse, setSelectedWarehouse] = useState<string | undefined>(undefined);
@@ -320,6 +327,32 @@ export default function App() {
   const summary = useMemo(() => {
     return calculateFinancialSummary(invoices);
   }, [invoices]);
+
+  // Header PO / Invoice search matching (prioritizing exact PO & Invoice numbers)
+  const isHeaderSearching = headerSearchQuery.trim().length > 0;
+  const searchedInvoices = useMemo(() => {
+    const q = headerSearchQuery.trim().toLowerCase();
+    if (!q) return [];
+
+    const getMatchRank = (inv: InvoiceRecord): number | null => {
+      const po = (inv.poNumber || '').trim().toLowerCase();
+      const invNum = (inv.invoiceNumber || '').trim().toLowerCase();
+      const grn = (inv.grnNumber || '').trim().toLowerCase();
+      const utr = (inv.paymentReferenceNo || '').trim().toLowerCase();
+
+      if (po === q || invNum === q) return 0;
+      if ((po && po.startsWith(q)) || (invNum && invNum.startsWith(q))) return 1;
+      if ((po && po.includes(q)) || (invNum && invNum.includes(q))) return 2;
+      if ((grn && grn.includes(q)) || (utr && utr.includes(q))) return 3;
+      return null;
+    };
+
+    return invoices
+      .map((inv) => ({ inv, rank: getMatchRank(inv) }))
+      .filter((item): item is { inv: InvoiceRecord; rank: number } => item.rank !== null)
+      .sort((a, b) => a.rank - b.rank)
+      .map((item) => item.inv);
+  }, [invoices, headerSearchQuery]);
 
   // Vendor & Customer details from first record if loaded
   const vendorName = invoices[0]?.vendorName || (payments[0]?.vendorName ?? '');
@@ -659,6 +692,7 @@ export default function App() {
     setPayments([]);
     setSelectedWarehouse(undefined);
     setSelectedInvoice(null);
+    setHeaderSearchQuery('');
     setCurrentTab('dashboard');
     setSharedNotice(null);
     await clearAllPersistentStorage();
@@ -701,7 +735,7 @@ export default function App() {
       {/* Header navigation bar adhering to Top Bar Contract */}
       <Header
         currentTab={currentTab}
-        onTabChange={setCurrentTab}
+        onTabChange={handleTabChange}
         onOpenUpload={() => setIsUploadOpen(true)}
         onOpenAddInvoice={() => handleOpenAddInvoice()}
         onOpenExport={() => setIsExportOpen(true)}
@@ -718,13 +752,15 @@ export default function App() {
         onToggleSidebar={toggleSidebar}
         onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
         isSidebarOpen={isSidebarOpen}
+        searchQuery={headerSearchQuery}
+        onSearchChange={setHeaderSearchQuery}
       />
 
       {/* Main Layout: Left Menubar Sidebar + Central Viewport */}
       <div className="flex-1 flex w-full min-w-0">
         <Sidebar
           currentTab={currentTab}
-          onTabChange={setCurrentTab}
+          onTabChange={handleTabChange}
           isOpen={isSidebarOpen}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={toggleSidebarCollapse}
@@ -745,6 +781,18 @@ export default function App() {
         {/* Main Content Viewport - Full Screen Desktop Presentation with Mobile Padding for Bottom Nav */}
         <main className="flex-1 min-w-0 w-full max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 py-5 space-y-5 pb-24 md:pb-6 overflow-x-hidden">
         
+        {/* When searching a PO or Invoice from the header, hide everything else and show only the searched PO full details */}
+        {isHeaderSearching ? (
+          <SearchedPODetails
+            searchQuery={headerSearchQuery}
+            matchedInvoices={searchedInvoices}
+            payments={payments}
+            onClearSearch={() => setHeaderSearchQuery('')}
+            onOpenMarkPaid={handleOpenMarkPaid}
+            onOpenEdit={(inv) => handleOpenAddInvoice(inv)}
+          />
+        ) : (
+        <>
         {/* Shared Dataset Notification Banner */}
         {sharedNotice && hasData && (
           <div className="bg-gradient-to-r from-sky-500/10 via-amber-500/10 to-emerald-500/10 border border-sky-400/30 dark:border-sky-500/30 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
@@ -934,22 +982,6 @@ export default function App() {
             {/* Tab 2: Full Invoice Ledger View */}
             {currentTab === 'invoices' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white">Invoice Master Register (Sheet 1)</h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Comprehensive audit view with all 34 fields including Invoice Date, Due Date, and Last Payment Date.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setIsShareOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-100 hover:bg-sky-200 dark:bg-sky-950 text-sky-800 dark:text-sky-300 font-semibold rounded-lg text-xs transition-colors"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span>Share This Sheet</span>
-                  </button>
-                </div>
-
                 <InvoiceTable
                   invoices={invoices}
                   onSelectInvoice={(inv) => setSelectedInvoice(inv)}
@@ -966,15 +998,6 @@ export default function App() {
             {/* Tab 3: Point 2 Payment Report Ledger */}
             {currentTab === 'payments' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white">Payment Report Ledger (Point 2)</h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Bank remittance details, payment numbers, UTR reference codes, and reversals.
-                    </p>
-                  </div>
-                </div>
-
                 <PaymentReportTable
                   payments={payments}
                   invoices={invoices}
@@ -1006,6 +1029,8 @@ export default function App() {
             )}
           </>
         )}
+        </>
+        )}
 
         </main>
       </div>
@@ -1013,7 +1038,7 @@ export default function App() {
       {/* Mobile Bottom Navigation Bar (Dashboard, Invoice, Payment, Overdue, + Add) */}
       <MobileBottomNav
         currentTab={currentTab}
-        onTabChange={setCurrentTab}
+        onTabChange={handleTabChange}
         onOpenAddInvoice={() => handleOpenAddInvoice()}
         onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
         totalInvoices={invoices.length}

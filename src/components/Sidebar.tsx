@@ -12,9 +12,9 @@ import {
   Download, 
   ChevronLeft, 
   ChevronRight, 
-  Cloud,
   X,
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface SidebarProps {
   currentTab: ViewTab;
@@ -296,34 +296,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Footer Area with Sync Status & Collapse Toggle */}
+        {/* Footer Area with Vendor, Install App & Collapse Toggle */}
         <div className="p-3 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/40">
           {(!isCollapsed || isMobileOpen) ? (
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <Cloud className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span>Cloud Database</span>
-                </span>
-                <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                  {isSyncing ? 'Syncing...' : 'Connected'}
-                </span>
-              </div>
-              {lastSyncTime && (
-                <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
-                  Synced: {lastSyncTime}
-                </div>
-              )}
               {vendorName && (
-                <div className="text-[10px] text-slate-600 dark:text-slate-300 font-medium truncate pt-1 border-t border-slate-200/50 dark:border-slate-800/50">
+                <div className="text-[10px] text-slate-600 dark:text-slate-300 font-medium truncate">
                   Vendor: {vendorName}
                 </div>
               )}
 
+              {/* Install App Button at bottom of Menubar (auto-hides if installed) */}
+              <PWAInstallButton variant="sidebar" />
+
               {/* Show/Hide collapse trigger at bottom */}
               <button
                 onClick={onToggleCollapse}
-                className="hidden md:flex items-center justify-center gap-2 w-full mt-2 py-1.5 text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                className="hidden md:flex items-center justify-center gap-2 w-full py-1.5 text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
                 <span>Collapse Menubar</span>
@@ -331,7 +320,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2 py-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" title="Cloud Database Connected" />
+              <PWAInstallButton variant="sidebar-collapsed" />
               <button
                 onClick={onToggleCollapse}
                 className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"

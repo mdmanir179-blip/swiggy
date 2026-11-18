@@ -108,26 +108,8 @@ export const ReconciliationView: React.FC<ReconciliationViewProps> = ({
       
       {/* Audit Health Overview */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-xl shadow-xs transition-colors">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <FileCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-              <span>Automated Invoice & Payment Reconciliation Engine</span>
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Deterministic auditing of GRN, PO amounts, TDS/TCS deductions, Debit notes, and Bank UTR settlement.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs px-3 py-1 rounded bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-medium">
-              Audit Accuracy: 100%
-            </span>
-          </div>
-        </div>
-
         {/* 3 Verification Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           
           <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 p-4 rounded-lg">
             <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Mathematical Consistency</div>
