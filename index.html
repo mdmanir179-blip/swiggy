@@ -4,6 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
+    <!-- Ensure window.fetch is writable if defined as getter-only by browser/extension -->
+    <script>
+      (function() {
+        try {
+          var desc = Object.getOwnPropertyDescriptor(window, 'fetch') ||
+            (typeof Window !== 'undefined' && Window.prototype ? Object.getOwnPropertyDescriptor(Window.prototype, 'fetch') : null);
+          if (desc && ((desc.get && !desc.set) || desc.writable === false)) {
+            var currentFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : window.fetch;
+            Object.defineProperty(window, 'fetch', {
+              value: currentFetch,
+              writable: true,
+              configurable: true,
+              enumerable: true
+            });
+          }
+        } catch (e) {}
+        window.addEventListener('error', function(event) {
+          if (event && typeof event.filename === 'string' && event.filename.indexOf('chrome-extension://') === 0) {
+            event.preventDefault();
+          }
+        }, true);
+      })();
+    </script>
+
     <!-- Capture PWA install event early so it is never missed -->
     <script>
       window.__deferredPWAInstallPrompt = null;
