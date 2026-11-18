@@ -907,17 +907,17 @@ export default function App() {
           </div>
         ) : (
           <>
-            {/* KPI Metric Cards displayed on top of dashboard & ledger */}
-            <MetricCards
-              summary={summary}
-              onFilterOverdue={handleFilterOverdue}
-              onFilterNotDue={handleFilterNotDue}
-              onFilterPaid={handleFilterPaid}
-            />
-
             {/* Tab 1: Dashboard View */}
             {currentTab === 'dashboard' && (
               <div className="space-y-5">
+                {/* KPI Metric Cards displayed only on Dashboard */}
+                <MetricCards
+                  summary={summary}
+                  onFilterOverdue={handleFilterOverdue}
+                  onFilterNotDue={handleFilterNotDue}
+                  onFilterPaid={handleFilterPaid}
+                />
+
                 {/* Real-time Data Audit: Last Uploaded File & Last Edit Information with Date & Time */}
                 <RecentActivityCard
                   lastUpload={lastUpload || {
