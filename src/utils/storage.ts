@@ -1,4 +1,4 @@
-import { InvoiceRecord, PaymentRecord } from '../types';
+import { InvoiceRecord, PaymentRecord, UploadActivityMeta, EditActivityMeta } from '../types';
 import { 
   saveInvoicesToCloud, 
   savePaymentsToCloud, 
@@ -155,6 +155,8 @@ export async function loadInitialDataset(): Promise<{
   invoices: InvoiceRecord[];
   payments: PaymentRecord[];
   vendorName?: string;
+  lastUpload?: UploadActivityMeta;
+  lastEdit?: EditActivityMeta;
   source: 'cloud' | 'indexedDB' | 'localStorage' | 'none';
 }> {
   // 1. Check Cloud Firestore FIRST (if online) to guarantee across-device consistency
@@ -170,6 +172,8 @@ export async function loadInitialDataset(): Promise<{
           invoices: cloudData.invoices,
           payments: cloudData.payments,
           vendorName: cloudData.vendorName,
+          lastUpload: cloudData.lastUpload,
+          lastEdit: cloudData.lastEdit,
           source: 'cloud'
         };
       }

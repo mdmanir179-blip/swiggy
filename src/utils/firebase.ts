@@ -1,19 +1,57 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  getDocs, 
+import {
+  getFirestore,
+  initializeFirestore,
+  FirestoreSettings,
+  collection,
+  doc,
+  getDocs,
   getDoc,
-  setDoc, 
-  deleteDoc, 
-  writeBatch, 
+  setDoc,
+  deleteDoc,
+  writeBatch,
   onSnapshot,
   getDocFromServer
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { InvoiceRecord, PaymentRecord } from '../types';
+import { InvoiceRecord, PaymentRecord, UploadActivityMeta, EditActivityMeta } from '../types';
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { name?: string; message?: string; code?: string };
+  return (
+    err.name === 'AbortError' ||
+    err.code === 'aborted' ||
+    (typeof err.message === 'string' && err.message.includes('aborted'))
+  );
+}
 
 // Initialize Firebase App
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -21,26 +59,63 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 // Initialize Auth
 export const auth = getAuth(app);
 
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || [],
+    },
+    operationType,
+    path,
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 // Gracefully attempt anonymous authentication if enabled (does not crash if not configured)
-let isAuthAttempted = false;
+let authAttemptPromise: Promise<void> | null = null;
 export async function ensureAuth(): Promise<void> {
-  if (isAuthAttempted) return;
-  isAuthAttempted = true;
+  if (auth.currentUser) return;
+  if (!authAttemptPromise) {
+    authAttemptPromise = (async () => {
+      try {
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        if (!isAbortError(err)) {
+          console.info('Firebase auth initialization info:', err);
+        }
+      }
+    })();
+  }
+  return authAttemptPromise;
+}
+
+// Force XHR long-polling & disable WebChannel FetchStreams to prevent AbortError: signal is aborted without reason
+function createFirestoreInstance() {
+  const databaseId = firebaseConfig.firestoreDatabaseId || undefined;
+  const settings = {
+    experimentalForceLongPolling: true,
+    useFetchStreams: false,
+  } as FirestoreSettings;
+
   try {
-    if (!auth.currentUser) {
-      await signInAnonymously(auth);
-    }
-  } catch (err) {
-    // Non-blocking: firestore.rules allows unauthenticated reads and writes
-    console.info('Firebase auth initialization info:', err);
+    return initializeFirestore(app, settings, databaseId);
+  } catch {
+    return databaseId ? getFirestore(app, databaseId) : getFirestore(app);
   }
 }
-ensureAuth().catch(() => {});
 
-// Initialize Firestore with the provisioned custom database ID
-export const db = firebaseConfig.firestoreDatabaseId 
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+export const db = createFirestoreInstance();
 
 // Collections
 export const INVOICES_COLLECTION = 'invoices';
@@ -124,18 +199,13 @@ export function sanitizePayment(pmt: Partial<PaymentRecord>, index = 0): Payment
 }
 
 /**
- * Save all invoices to Firestore Cloud Database
- * Syncs both the collection documents (/invoices/{id}) and the active_ledger workspace doc
- */
-import { UploadActivityMeta, EditActivityMeta } from '../types';
-
-/**
  * Test connectivity on boot per Firebase guidelines
  */
 async function testConnection() {
   try {
     await getDocFromServer(doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC));
   } catch (error) {
+    if (isAbortError(error)) return;
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firestore notice: client offline, will sync when reconnected.');
     }
@@ -298,73 +368,95 @@ export async function updateSingleInvoiceInCloud(
   }
 }
 
-/**
- * Load complete dataset from Cloud Firestore
- * This is called on startup from any device (Desktop, Laptop, Phone, or Vercel URL)
- */
-export async function loadDatasetFromCloud(): Promise<{
+export interface CloudDatasetResult {
   invoices: InvoiceRecord[];
   payments: PaymentRecord[];
   vendorName?: string;
   lastUpdated?: string;
   lastUpload?: UploadActivityMeta;
   lastEdit?: EditActivityMeta;
-} | null> {
-  await ensureAuth();
-  try {
-    const [invSnap, pmtSnap, activeDocSnap] = await Promise.all([
-      getDocs(collection(db, INVOICES_COLLECTION)),
-      getDocs(collection(db, PAYMENTS_COLLECTION)),
-      getDoc(doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC))
-    ]);
+  version?: number;
+}
 
-    const invoices: InvoiceRecord[] = [];
-    const payments: PaymentRecord[] = [];
+let inFlightLoadPromise: Promise<CloudDatasetResult | null> | null = null;
 
-    invSnap.forEach(d => {
-      invoices.push(sanitizeInvoice(d.data() as any));
-    });
-
-    pmtSnap.forEach(d => {
-      payments.push(sanitizePayment(d.data() as any));
-    });
-
-    let vendorName: string | undefined = undefined;
-    let lastUpdated: string | undefined = undefined;
-    let lastUpload: UploadActivityMeta | undefined = undefined;
-    let lastEdit: EditActivityMeta | undefined = undefined;
-
-    if (activeDocSnap.exists()) {
-      const activeData = activeDocSnap.data();
-      vendorName = activeData.vendorName;
-      lastUpdated = activeData.updatedAt || activeData.lastUpdated;
-      lastUpload = activeData.lastUpload;
-      lastEdit = activeData.lastEdit;
-
-      // Fallback: if collection was empty but active_ledger had array
-      if (invoices.length === 0 && Array.isArray(activeData.invoices) && activeData.invoices.length > 0) {
-        invoices.push(...activeData.invoices.map((inv: any, idx: number) => sanitizeInvoice(inv, idx)));
-      }
-      if (payments.length === 0 && Array.isArray(activeData.payments) && activeData.payments.length > 0) {
-        payments.push(...activeData.payments.map((p: any, idx: number) => sanitizePayment(p, idx)));
-      }
-    }
-
-    if (invoices.length > 0 || payments.length > 0) {
-      console.log(`[Cloud Sync] Loaded ${invoices.length} invoices and ${payments.length} payments from Firestore.`);
-      return {
-        invoices,
-        payments,
-        vendorName: vendorName || invoices[0]?.vendorName || '',
-        lastUpdated,
-        lastUpload,
-        lastEdit
-      };
-    }
-  } catch (err) {
-    console.warn('[Cloud Sync] Could not fetch dataset from Firestore:', err);
+/**
+ * Load complete dataset from Cloud Firestore
+ * Coalesces concurrent startup/snapshot calls to avoid overlapping abort-prone requests.
+ */
+export async function loadDatasetFromCloud(): Promise<CloudDatasetResult | null> {
+  if (inFlightLoadPromise) {
+    return inFlightLoadPromise;
   }
-  return null;
+
+  inFlightLoadPromise = (async () => {
+    await ensureAuth();
+    try {
+      const [invSnap, pmtSnap, activeDocSnap] = await Promise.all([
+        getDocs(collection(db, INVOICES_COLLECTION)),
+        getDocs(collection(db, PAYMENTS_COLLECTION)),
+        getDoc(doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC))
+      ]);
+
+      const invoices: InvoiceRecord[] = [];
+      const payments: PaymentRecord[] = [];
+
+      invSnap.forEach(d => {
+        invoices.push(sanitizeInvoice(d.data() as any));
+      });
+
+      pmtSnap.forEach(d => {
+        payments.push(sanitizePayment(d.data() as any));
+      });
+
+      let vendorName: string | undefined = undefined;
+      let lastUpdated: string | undefined = undefined;
+      let lastUpload: UploadActivityMeta | undefined = undefined;
+      let lastEdit: EditActivityMeta | undefined = undefined;
+      let version: number | undefined = undefined;
+
+      if (activeDocSnap.exists()) {
+        const activeData = activeDocSnap.data();
+        vendorName = activeData.vendorName;
+        lastUpdated = activeData.updatedAt || activeData.lastUpdated;
+        lastUpload = activeData.lastUpload;
+        lastEdit = activeData.lastEdit;
+        version = typeof activeData.version === 'number' ? activeData.version : undefined;
+
+        // Fallback: if collection was empty but active_ledger had array
+        if (invoices.length === 0 && Array.isArray(activeData.invoices) && activeData.invoices.length > 0) {
+          invoices.push(...activeData.invoices.map((inv: any, idx: number) => sanitizeInvoice(inv, idx)));
+        }
+        if (payments.length === 0 && Array.isArray(activeData.payments) && activeData.payments.length > 0) {
+          payments.push(...activeData.payments.map((p: any, idx: number) => sanitizePayment(p, idx)));
+        }
+      }
+
+      if (invoices.length > 0 || payments.length > 0) {
+        console.log(`[Cloud Sync] Loaded ${invoices.length} invoices and ${payments.length} payments from Firestore.`);
+        return {
+          invoices,
+          payments,
+          vendorName: vendorName || invoices[0]?.vendorName || '',
+          lastUpdated,
+          lastUpload,
+          lastEdit,
+          version
+        };
+      }
+    } catch (err) {
+      if (!isAbortError(err)) {
+        console.warn('[Cloud Sync] Could not fetch dataset from Firestore:', err);
+      }
+    }
+    return null;
+  })();
+
+  try {
+    return await inFlightLoadPromise;
+  } finally {
+    inFlightLoadPromise = null;
+  }
 }
 
 /**
@@ -384,31 +476,40 @@ export function subscribeToCloudLedger(
   const activeDocRef = doc(db, WORKSPACE_COLLECTION, ACTIVE_WORKSPACE_DOC);
 
   let lastKnownVersion = 0;
+  let unsubscribed = false;
 
-  return onSnapshot(activeDocRef, async (snap) => {
-    if (snap.exists()) {
-      const data = snap.data();
-      const currentVersion = Number(data.version) || 0;
+  const unsubscribe = onSnapshot(activeDocRef, async (snap) => {
+    if (unsubscribed || !snap.exists()) return;
+    const data = snap.data();
+    const currentVersion = Number(data.version) || 0;
 
-      // Avoid redundant work if this was our own write
-      if (currentVersion !== 0 && currentVersion === lastKnownVersion) {
-        return;
+    // Avoid redundant work if this was our own write
+    if (currentVersion !== 0 && currentVersion === lastKnownVersion) {
+      return;
+    }
+    lastKnownVersion = currentVersion;
+
+    // Fetch the updated collection from cloud
+    try {
+      const fullDataset = await loadDatasetFromCloud();
+      if (!unsubscribed && fullDataset) {
+        onUpdate(fullDataset);
       }
-      lastKnownVersion = currentVersion;
-
-      // Fetch the updated collection from cloud
-      try {
-        const fullDataset = await loadDatasetFromCloud();
-        if (fullDataset) {
-          onUpdate(fullDataset);
-        }
-      } catch (err) {
+    } catch (err) {
+      if (!isAbortError(err)) {
         console.warn('[Cloud Sync] Live reload fetch notice:', err);
       }
     }
   }, (err) => {
-    console.warn('[Cloud Sync] Real-time subscription notice:', err);
+    if (!isAbortError(err)) {
+      console.warn('[Cloud Sync] Real-time subscription notice:', err);
+    }
   });
+
+  return () => {
+    unsubscribed = true;
+    unsubscribe();
+  };
 }
 
 /**

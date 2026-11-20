@@ -8,20 +8,36 @@
     <script>
       (function() {
         try {
-          var desc = Object.getOwnPropertyDescriptor(window, 'fetch') ||
-            (typeof Window !== 'undefined' && Window.prototype ? Object.getOwnPropertyDescriptor(Window.prototype, 'fetch') : null);
+          var current = window;
+          var desc = null;
+          while (current && !desc) {
+            desc = Object.getOwnPropertyDescriptor(current, 'fetch');
+            current = Object.getPrototypeOf(current);
+          }
           if (desc && ((desc.get && !desc.set) || desc.writable === false)) {
             var currentFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : window.fetch;
-            Object.defineProperty(window, 'fetch', {
-              value: currentFetch,
-              writable: true,
-              configurable: true,
-              enumerable: true
-            });
+            var ownDesc = Object.getOwnPropertyDescriptor(window, 'fetch');
+            if (!ownDesc || ownDesc.configurable) {
+              Object.defineProperty(window, 'fetch', {
+                value: currentFetch,
+                writable: true,
+                configurable: true,
+                enumerable: true
+              });
+            }
           }
         } catch (e) {}
         window.addEventListener('error', function(event) {
-          if (event && typeof event.filename === 'string' && event.filename.indexOf('chrome-extension://') === 0) {
+          var src = event && (event.filename || (event.error && event.error.stack) || '');
+          if (typeof src === 'string' && src.indexOf('chrome-extension://') !== -1) {
+            event.preventDefault();
+          }
+        }, true);
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event && event.reason;
+          var stack = reason && typeof reason.stack === 'string' ? reason.stack : '';
+          var name = reason && typeof reason.name === 'string' ? reason.name : '';
+          if (stack.indexOf('chrome-extension://') !== -1 || name === 'AbortError') {
             event.preventDefault();
           }
         }, true);

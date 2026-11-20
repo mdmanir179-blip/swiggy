@@ -149,22 +149,17 @@ export default function App() {
           if (dataset.payments.length > 0) {
             setPayments(dataset.payments);
           }
+          if (dataset.lastUpload) {
+            setLastUpload(dataset.lastUpload);
+            try { localStorage.setItem('instamart_last_upload', JSON.stringify(dataset.lastUpload)); } catch {}
+          }
+          if (dataset.lastEdit) {
+            setLastEdit(dataset.lastEdit);
+            try { localStorage.setItem('instamart_last_edit', JSON.stringify(dataset.lastEdit)); } catch {}
+          }
           setIsStorageLoaded(true);
           const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setLastSyncTime(timeStr);
-        }
-
-        // Also check if cloud has stored lastUpload or lastEdit
-        const cloudData = await loadDatasetFromCloud();
-        if (isMounted && cloudData) {
-          if (cloudData.lastUpload) {
-            setLastUpload(cloudData.lastUpload);
-            try { localStorage.setItem('instamart_last_upload', JSON.stringify(cloudData.lastUpload)); } catch {}
-          }
-          if (cloudData.lastEdit) {
-            setLastEdit(cloudData.lastEdit);
-            try { localStorage.setItem('instamart_last_edit', JSON.stringify(cloudData.lastEdit)); } catch {}
-          }
         }
       } catch (err) {
         console.warn('Persistent storage hydration failed:', err);
