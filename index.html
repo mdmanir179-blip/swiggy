@@ -31,6 +31,9 @@
           var src = event && (event.filename || (event.error && event.error.stack) || '');
           if (typeof src === 'string' && src.indexOf('chrome-extension://') !== -1) {
             event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
           }
         }, true);
         window.addEventListener('unhandledrejection', function(event) {
@@ -39,6 +42,9 @@
           var name = reason && typeof reason.name === 'string' ? reason.name : '';
           if (stack.indexOf('chrome-extension://') !== -1 || name === 'AbortError') {
             event.preventDefault();
+            if (stack.indexOf('chrome-extension://') !== -1 && typeof event.stopImmediatePropagation === 'function') {
+              event.stopImmediatePropagation();
+            }
           }
         }, true);
       })();
