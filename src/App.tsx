@@ -37,6 +37,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { MarkAsPaidModal } from './components/MarkAsPaidModal';
 import { AddInvoiceModal } from './components/AddInvoiceModal';
 import { SearchedPODetails } from './components/SearchedPODetails';
+import { DateRangePaymentView } from './components/DateRangePaymentView';
 import { 
   Upload, 
   FileSpreadsheet, 
@@ -301,9 +302,18 @@ export default function App() {
 
   const [currentTab, setCurrentTab] = useState<ViewTab>('dashboard');
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
+  const [headerDateFrom, setHeaderDateFrom] = useState('');
+  const [headerDateTo, setHeaderDateTo] = useState('');
+
+  const handleClearDateRange = () => {
+    setHeaderDateFrom('');
+    setHeaderDateTo('');
+  };
 
   const handleTabChange = (tab: ViewTab) => {
     setHeaderSearchQuery('');
+    setHeaderDateFrom('');
+    setHeaderDateTo('');
     setCurrentTab(tab);
   };
   
@@ -328,7 +338,8 @@ export default function App() {
     return calculateFinancialSummary(invoices);
   }, [invoices]);
 
-  // Header PO / Invoice search matching (prioritizing exact PO & Invoice numbers)
+  // Header PO / Invoice search & date-to-date filtering
+  const isHeaderDateFiltering = Boolean(headerDateFrom || headerDateTo);
   const isHeaderSearching = headerSearchQuery.trim().length > 0;
   const searchedInvoices = useMemo(() => {
     const q = headerSearchQuery.trim().toLowerCase();
@@ -693,6 +704,8 @@ export default function App() {
     setSelectedWarehouse(undefined);
     setSelectedInvoice(null);
     setHeaderSearchQuery('');
+    setHeaderDateFrom('');
+    setHeaderDateTo('');
     setCurrentTab('dashboard');
     setSharedNotice(null);
     await clearAllPersistentStorage();
@@ -754,6 +767,11 @@ export default function App() {
         isSidebarOpen={isSidebarOpen}
         searchQuery={headerSearchQuery}
         onSearchChange={setHeaderSearchQuery}
+        dateFrom={headerDateFrom}
+        dateTo={headerDateTo}
+        onDateFromChange={setHeaderDateFrom}
+        onDateToChange={setHeaderDateTo}
+        onClearDateRange={handleClearDateRange}
       />
 
       {/* Main Layout: Left Menubar Sidebar + Central Viewport */}
@@ -781,8 +799,29 @@ export default function App() {
         {/* Main Content Viewport - Full Screen Desktop Presentation with Mobile Padding for Bottom Nav */}
         <main className="flex-1 min-w-0 w-full max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 py-5 space-y-5 pb-24 md:pb-6 overflow-x-hidden">
         
-        {/* When searching a PO or Invoice from the header, hide everything else and show only the searched PO full details */}
-        {isHeaderSearching ? (
+        {/* Date-to-Date Payment & Ledger Tracker when header date range is active */}
+        {isHeaderDateFiltering ? (
+          <DateRangePaymentView
+            invoices={invoices}
+            payments={payments}
+            dateFrom={headerDateFrom}
+            dateTo={headerDateTo}
+            searchQuery={headerSearchQuery}
+            onDateRangeChange={(from, to) => {
+              setHeaderDateFrom(from);
+              setHeaderDateTo(to);
+            }}
+            onClearAll={() => {
+              setHeaderDateFrom('');
+              setHeaderDateTo('');
+              setHeaderSearchQuery('');
+            }}
+            onSelectInvoice={(inv) => setSelectedInvoice(inv)}
+            onOpenMarkPaid={handleOpenMarkPaid}
+            onOpenEdit={(inv) => handleOpenAddInvoice(inv)}
+          />
+        ) : isHeaderSearching ? (
+          /* When searching a PO or Invoice from the header, hide everything else and show only the searched PO full details */
           <SearchedPODetails
             searchQuery={headerSearchQuery}
             matchedInvoices={searchedInvoices}

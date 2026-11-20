@@ -9,7 +9,8 @@ import {
   PanelLeft,
   Menu,
   Search,
-  X
+  X,
+  Calendar
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -33,6 +34,11 @@ interface HeaderProps {
   isSidebarOpen?: boolean;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  dateFrom?: string;
+  dateTo?: string;
+  onDateFromChange?: (date: string) => void;
+  onDateToChange?: (date: string) => void;
+  onClearDateRange?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -55,7 +61,12 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenMobileSidebar,
   isSidebarOpen = true,
   searchQuery = '',
-  onSearchChange
+  onSearchChange,
+  dateFrom = '',
+  dateTo = '',
+  onDateFromChange,
+  onDateToChange,
+  onClearDateRange
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -126,36 +137,80 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Center Search Bar (Desktop lg+) */}
-          {onSearchChange && (
-            <div className="hidden lg:flex flex-1 max-w-md mx-2 min-w-0">
-              <div className="relative w-full">
-                <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => onSearchChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape' && searchQuery) {
-                      onSearchChange('');
-                    }
-                  }}
-                  placeholder="Search PO No. or Invoice No..."
-                  aria-label="Search PO or Invoice number"
-                  className="w-full pl-9 pr-8 py-1.5 text-xs sm:text-sm bg-slate-100/90 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400/70 focus:border-amber-400 dark:focus:border-amber-500 transition-all font-mono"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => onSearchChange('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded transition-colors"
-                    title="Clear search (Esc)"
-                    aria-label="Clear search"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+          {/* Center Search Bar + Date-to-Date Range Filter (Desktop lg+) */}
+          {(onSearchChange || (onDateFromChange && onDateToChange)) && (
+            <div className="hidden lg:flex flex-1 max-w-3xl mx-2 min-w-0 items-center gap-2">
+              {onSearchChange && (
+                <div className="relative flex-1 min-w-[180px]">
+                  <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => onSearchChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape' && searchQuery) {
+                        onSearchChange('');
+                      }
+                    }}
+                    placeholder="Search PO No. or Invoice No..."
+                    aria-label="Search PO or Invoice number"
+                    className="w-full pl-9 pr-8 py-1.5 text-xs sm:text-sm bg-slate-100/90 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400/70 focus:border-amber-400 dark:focus:border-amber-500 transition-all font-mono"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => onSearchChange('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded transition-colors"
+                      title="Clear search (Esc)"
+                      aria-label="Clear search"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {onDateFromChange && onDateToChange && (
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all shrink-0 ${
+                    dateFrom || dateTo
+                      ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-400 dark:border-amber-600'
+                      : 'bg-slate-100/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => onDateFromChange(e.target.value)}
+                    aria-label="From date"
+                    title="Track Payment / Data From Date"
+                    className="bg-transparent text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none w-[114px] cursor-pointer"
+                  />
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium select-none">
+                    to
+                  </span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => onDateToChange(e.target.value)}
+                    aria-label="To date"
+                    title="Track Payment / Data To Date"
+                    className="bg-transparent text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none w-[114px] cursor-pointer"
+                  />
+                  {(dateFrom || dateTo) && onClearDateRange && (
+                    <button
+                      type="button"
+                      onClick={onClearDateRange}
+                      className="p-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded transition-colors"
+                      title="Clear date filter"
+                      aria-label="Clear date filter"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -208,36 +263,80 @@ export const Header: React.FC<HeaderProps> = ({
 
         </div>
 
-        {/* Mobile & Tablet Header Search Bar (< lg) */}
-        {onSearchChange && (
-          <div className="lg:hidden pb-2.5">
-            <div className="relative w-full">
-              <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape' && searchQuery) {
-                    onSearchChange('');
-                  }
-                }}
-                placeholder="Search PO No. or Invoice No..."
-                aria-label="Search PO or Invoice number"
-                className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-100/90 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400/70 focus:border-amber-400 dark:focus:border-amber-500 transition-all font-mono"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => onSearchChange('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded transition-colors"
-                  title="Clear search"
-                  aria-label="Clear search"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+        {/* Mobile & Tablet Header Search Bar + Date-to-Date Range Filter (< lg) */}
+        {(onSearchChange || (onDateFromChange && onDateToChange)) && (
+          <div className="lg:hidden pb-2.5 flex flex-col sm:flex-row gap-2">
+            {onSearchChange && (
+              <div className="relative flex-1 min-w-0">
+                <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape' && searchQuery) {
+                      onSearchChange('');
+                    }
+                  }}
+                  placeholder="Search PO No. or Invoice No..."
+                  aria-label="Search PO or Invoice number"
+                  className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-100/90 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400/70 focus:border-amber-400 dark:focus:border-amber-500 transition-all font-mono"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => onSearchChange('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded transition-colors"
+                    title="Clear search"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {onDateFromChange && onDateToChange && (
+              <div
+                className={`flex items-center justify-between sm:justify-start gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all shrink-0 ${
+                  dateFrom || dateTo
+                    ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-400 dark:border-amber-600'
+                    : 'bg-slate-100/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 min-w-0 flex-1 sm:flex-initial">
+                  <Calendar className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => onDateFromChange(e.target.value)}
+                    aria-label="From date"
+                    className="bg-transparent text-[11px] font-mono text-slate-800 dark:text-slate-100 focus:outline-none w-full sm:w-[108px] min-w-0 cursor-pointer"
+                  />
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium shrink-0">
+                    to
+                  </span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => onDateToChange(e.target.value)}
+                    aria-label="To date"
+                    className="bg-transparent text-[11px] font-mono text-slate-800 dark:text-slate-100 focus:outline-none w-full sm:w-[108px] min-w-0 cursor-pointer"
+                  />
+                </div>
+                {(dateFrom || dateTo) && onClearDateRange && (
+                  <button
+                    type="button"
+                    onClick={onClearDateRange}
+                    className="p-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded transition-colors shrink-0"
+                    title="Clear date filter"
+                    aria-label="Clear date filter"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

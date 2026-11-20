@@ -210,3 +210,19 @@ export function parseDateForSort(dateStr?: string | null): number {
   return isNaN(parsed) ? 0 : parsed;
 }
 
+/**
+ * Normalizes any date string (YYYY-MM-DD, DD-MM-YYYY, DD-MMM-YYYY, ISO timestamp)
+ * into a UTC midnight timestamp for timezone-safe date-to-date range comparisons.
+ * Returns 0 if missing or invalid.
+ */
+export function toUtcDayTimestamp(dateStr?: string | null): number {
+  if (!dateStr) return 0;
+  const trimmed = String(dateStr).trim();
+  if (!trimmed || trimmed === '—' || trimmed === '-') return 0;
+  const formatted = parseAndFormatDate(trimmed);
+  const ts = parseDateForSort(formatted || trimmed);
+  if (!ts) return 0;
+  const d = new Date(ts);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
