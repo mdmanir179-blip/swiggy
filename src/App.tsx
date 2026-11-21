@@ -820,10 +820,12 @@ export default function App() {
           <SearchedPODetails
             searchQuery={headerSearchQuery}
             matchedInvoices={searchedInvoices}
+            allInvoices={invoices}
             payments={payments}
             onClearSearch={() => setHeaderSearchQuery('')}
             onOpenMarkPaid={handleOpenMarkPaid}
             onOpenEdit={(inv) => handleOpenAddInvoice(inv)}
+            onSearchInvoice={(invNum) => setHeaderSearchQuery(invNum)}
           />
         ) : (
         <>

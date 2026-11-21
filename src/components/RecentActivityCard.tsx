@@ -147,55 +147,55 @@ export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({
   const editBadge = getActionBadge(lastEdit?.action);
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xs transition-colors">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 sm:p-3 shadow-xs transition-colors">
 
       {/* Main Grid: 2 High-Visibility Panels */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
         
         {/* PANEL 1: LAST FILE UPLOAD DATE & TIME */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-sky-50/60 via-slate-50 to-white dark:from-slate-900 dark:via-slate-900/90 dark:to-slate-950 border border-sky-200/80 dark:border-sky-900/50 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div className="space-y-4">
+        <div className="relative overflow-hidden bg-gradient-to-br from-sky-50/60 via-slate-50 to-white dark:from-slate-900 dark:via-slate-900/90 dark:to-slate-950 border border-sky-200/80 dark:border-sky-900/50 rounded-xl p-2.5 sm:p-3 shadow-xs flex flex-col justify-between">
+          <div className="space-y-1.5">
             
             {/* Header Tag */}
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-sky-700 dark:text-sky-400 flex items-center gap-1.5">
-                <FileSpreadsheet className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700 dark:text-sky-400 flex items-center gap-1.5">
+                <FileSpreadsheet className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
                 <span>Last File Upload</span>
               </span>
-              <span className="text-[11px] px-2.5 py-0.5 rounded-full font-semibold bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
                 {lastUpload 
                   ? (lastUpload.fileType === 'invoice' ? 'Invoice Ledger (34 Fields)' : 'Payment Remittance (13 Fields)')
                   : (totalInvoices > 0 ? 'Active Dataset' : 'Ready for Upload')}
               </span>
             </div>
 
-            {/* PROMINENT DATE & TIME HIGHLIGHT BOX */}
-            <div className="bg-white dark:bg-slate-800/90 border border-sky-200 dark:border-slate-700/80 rounded-xl p-3 sm:p-3.5 shadow-xs">
-              <div className="text-[11px] font-bold uppercase text-slate-400 dark:text-slate-400 mb-1 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+            {/* COMPACT DATE & TIME HIGHLIGHT BOX */}
+            <div className="bg-white dark:bg-slate-800/90 border border-sky-200 dark:border-slate-700/80 rounded-lg px-2.5 py-1.5 shadow-2xs flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <div className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-400 flex items-center gap-1 shrink-0">
+                <Calendar className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                 <span>Upload Date & Time</span>
               </div>
               
-              <div className="flex flex-wrap items-baseline gap-2.5">
-                <span className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white font-mono tracking-tight">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight">
                   {uploadDateTime.date}
                 </span>
-                <span className="text-sm sm:text-base font-bold text-sky-600 dark:text-sky-400 font-mono">
+                <span className="text-xs font-bold text-sky-600 dark:text-sky-400">
                   {uploadDateTime.time}
                 </span>
                 {uploadDateTime.relative && (
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
                     {uploadDateTime.relative}
                   </span>
                 )}
               </div>
             </div>
 
-            {/* File & Records Detail */}
-            <div className="space-y-1.5 pt-1">
-              <div className="text-xs text-slate-500 dark:text-slate-400">File Name:</div>
+            {/* File & Records Detail (Compact single row) */}
+            <div className="flex items-center gap-2 pt-0.5">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">File Name:</span>
               <div 
-                className="text-sm font-bold text-slate-900 dark:text-white font-mono truncate bg-slate-100/70 dark:bg-slate-800/50 px-2.5 py-1.5 rounded-lg border border-slate-200/60 dark:border-slate-800"
+                className="flex-1 min-w-0 text-xs font-bold text-slate-900 dark:text-white truncate bg-slate-100/70 dark:bg-slate-800/50 px-2 py-1 rounded-md border border-slate-200/60 dark:border-slate-800"
                 title={lastUpload?.fileName || 'Instamart_Standard_Invoice_Report.xlsx'}
               >
                 {lastUpload?.fileName || (totalInvoices > 0 ? 'Instamart_Standard_Invoice_Report.xlsx' : 'No file uploaded yet')}
@@ -205,11 +205,11 @@ export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({
           </div>
 
           {/* Footer of Panel 1 */}
-          <div className="mt-4 pt-3 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between text-xs">
+          <div className="mt-2 pt-1.5 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between text-[11px]">
             <span className="text-slate-500 dark:text-slate-400">
               Total Ingested Records:
             </span>
-            <span className="font-mono font-bold text-slate-900 dark:text-white bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 px-2 py-0.5 rounded border border-sky-200 dark:border-sky-900">
+            <span className="font-bold bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 px-2 py-0.5 rounded border border-sky-200 dark:border-sky-900">
               {lastUpload?.rowCount 
                 ? `${lastUpload.rowCount} Invoices / Rows` 
                 : `${totalInvoices} Invoices, ${totalPayments} Payments`}
@@ -218,47 +218,47 @@ export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({
         </div>
 
         {/* PANEL 2: LAST FILE / RECORD EDIT DATE & TIME */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-amber-50/60 via-slate-50 to-white dark:from-slate-900 dark:via-slate-900/90 dark:to-slate-950 border border-amber-200/80 dark:border-amber-900/50 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div className="space-y-4">
+        <div className="relative overflow-hidden bg-gradient-to-br from-amber-50/60 via-slate-50 to-white dark:from-slate-900 dark:via-slate-900/90 dark:to-slate-950 border border-amber-200/80 dark:border-amber-900/50 rounded-xl p-2.5 sm:p-3 shadow-xs flex flex-col justify-between">
+          <div className="space-y-1.5">
             
             {/* Header Tag */}
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
-                <Edit3 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                <Edit3 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 <span>Last Edit & Modification</span>
               </span>
-              <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${editBadge.className}`}>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${editBadge.className}`}>
                 {editBadge.label}
               </span>
             </div>
 
-            {/* PROMINENT DATE & TIME HIGHLIGHT BOX */}
-            <div className="bg-white dark:bg-slate-800/90 border border-amber-200 dark:border-slate-700/80 rounded-xl p-3 sm:p-3.5 shadow-xs">
-              <div className="text-[11px] font-bold uppercase text-slate-400 dark:text-slate-400 mb-1 flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            {/* COMPACT DATE & TIME HIGHLIGHT BOX */}
+            <div className="bg-white dark:bg-slate-800/90 border border-amber-200 dark:border-slate-700/80 rounded-lg px-2.5 py-1.5 shadow-2xs flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <div className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-400 flex items-center gap-1 shrink-0">
+                <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                 <span>Modification Date & Time</span>
               </div>
               
-              <div className="flex flex-wrap items-baseline gap-2.5">
-                <span className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white font-mono tracking-tight">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight">
                   {editDateTime.date}
                 </span>
-                <span className="text-sm sm:text-base font-bold text-amber-600 dark:text-amber-400 font-mono">
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
                   {editDateTime.time}
                 </span>
                 {editDateTime.relative && (
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
                     {editDateTime.relative}
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Edit Description Detail */}
-            <div className="space-y-1.5 pt-1">
-              <div className="text-xs text-slate-500 dark:text-slate-400">Action Summary:</div>
+            {/* Edit Description Detail (Compact single row) */}
+            <div className="flex items-center gap-2 pt-0.5">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">Action Summary:</span>
               <div 
-                className="text-sm font-semibold text-slate-900 dark:text-white truncate bg-slate-100/70 dark:bg-slate-800/50 px-2.5 py-1.5 rounded-lg border border-slate-200/60 dark:border-slate-800"
+                className="flex-1 min-w-0 text-xs font-semibold text-slate-900 dark:text-white truncate bg-slate-100/70 dark:bg-slate-800/50 px-2 py-1 rounded-md border border-slate-200/60 dark:border-slate-800"
                 title={lastEdit?.description || 'Active dataset verified and synchronized'}
               >
                 {lastEdit?.description || (totalInvoices > 0 ? 'Active invoices reconciled & validated' : 'No manual edits recorded yet')}
@@ -268,12 +268,12 @@ export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({
           </div>
 
           {/* Footer of Panel 2 */}
-          <div className="mt-4 pt-3 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between text-xs">
+          <div className="mt-2 pt-1.5 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between text-[11px]">
             <span className="text-slate-500 dark:text-slate-400">
               Audit Status:
             </span>
-            <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-900">
-              <ShieldCheck className="w-3.5 h-3.5" />
+            <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-900">
+              <ShieldCheck className="w-3 h-3" />
               <span>Multi-Device Parity Verified</span>
             </span>
           </div>
@@ -282,17 +282,17 @@ export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({
       </div>
 
       {/* Quick Audit Timestamp Summary Strip at bottom */}
-      <div className="mt-4 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-400">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+      <div className="mt-2 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />
           <span className="font-medium text-slate-800 dark:text-slate-200">
             Active Ledger Summary:
           </span>
-          <span className="font-mono text-slate-600 dark:text-slate-400">
+          <span className="text-slate-600 dark:text-slate-400">
             Uploaded on <strong>{uploadDateTime.full}</strong> · Modified on <strong>{editDateTime.full}</strong>
           </span>
         </div>
-        <div className="text-[11px] text-slate-500 dark:text-slate-500">
+        <div className="text-[10px] text-slate-500 dark:text-slate-500 shrink-0">
           Auto-synchronized across all connected devices
         </div>
       </div>

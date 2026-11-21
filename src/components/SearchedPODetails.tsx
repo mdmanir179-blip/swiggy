@@ -24,19 +24,23 @@ import {
 interface SearchedPODetailsProps {
   searchQuery: string;
   matchedInvoices: InvoiceRecord[];
+  allInvoices: InvoiceRecord[];
   payments: PaymentRecord[];
   onClearSearch: () => void;
   onOpenMarkPaid: (invoice: InvoiceRecord) => void;
   onOpenEdit: (invoice: InvoiceRecord) => void;
+  onSearchInvoice?: (invoiceNumber: string) => void;
 }
 
 export const SearchedPODetails: React.FC<SearchedPODetailsProps> = ({
   searchQuery,
   matchedInvoices,
+  allInvoices,
   payments,
   onClearSearch,
   onOpenMarkPaid,
-  onOpenEdit
+  onOpenEdit,
+  onSearchInvoice
 }) => {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -179,12 +183,50 @@ export const SearchedPODetails: React.FC<SearchedPODetailsProps> = ({
               const isOverdue = (invoice.overdueStatus || '').toLowerCase().includes('overdue') && invoice.outstandingPayment > 0.01;
               const isPaid = invoice.paymentStatus === 'Paid' || invoice.outstandingPayment <= 0.01;
 
-              // Find linked payment remittances for this invoice
-              const linkedPayments = payments.filter(
-                (p) =>
-                  (p.linkedInvoices && p.linkedInvoices.some((num) => num.toLowerCase() === (invoice.invoiceNumber || '').toLowerCase())) ||
-                  (invoice.paymentReferenceNo && p.paymentReferenceNo && p.paymentReferenceNo.toLowerCase() === invoice.paymentReferenceNo.toLowerCase())
-              );
+              // Find linked payment remittances for this invoice (supports comma-separated UTR refs)
+              const invRefs = (invoice.paymentReferenceNo || '')
+                .split(/[,;\n]+/)
+                .map((r) => r.trim().toLowerCase())
+                .filter(Boolean);
+              const invNumLower = (invoice.invoiceNumber || '').trim().toLowerCase();
+
+              const linkedPayments = payments.filter((p) => {
+                const pRefLower = (p.paymentReferenceNo || '').trim().toLowerCase();
+                const matchesLinkedList =
+                  Array.isArray(p.linkedInvoices) &&
+                  p.linkedInvoices.some((num) => num.trim().toLowerCase() === invNumLower);
+                const matchesRef = Boolean(pRefLower && invRefs.includes(pRefLower));
+                return matchesLinkedList || matchesRef;
+              });
+
+              const getBatchInvoiceNumbers = (pmt: PaymentRecord): string[] => {
+                const seen = new Map<string, string>();
+                const addInv = (num?: string) => {
+                  const cleaned = (num || '').trim();
+                  if (!cleaned) return;
+                  const key = cleaned.toLowerCase();
+                  if (!seen.has(key)) seen.set(key, cleaned);
+                };
+
+                if (Array.isArray(pmt.linkedInvoices)) {
+                  pmt.linkedInvoices.forEach(addInv);
+                }
+
+                const pRefLower = (pmt.paymentReferenceNo || '').trim().toLowerCase();
+                if (pRefLower) {
+                  allInvoices.forEach((otherInv) => {
+                    const otherRefs = (otherInv.paymentReferenceNo || '')
+                      .split(/[,;\n]+/)
+                      .map((r) => r.trim().toLowerCase())
+                      .filter(Boolean);
+                    if (otherRefs.includes(pRefLower)) {
+                      addInv(otherInv.invoiceNumber);
+                    }
+                  });
+                }
+
+                return Array.from(seen.values());
+              };
 
               return (
                 <div
@@ -619,35 +661,72 @@ export const SearchedPODetails: React.FC<SearchedPODetailsProps> = ({
                           <table className="w-full text-left border-collapse text-xs">
                             <thead>
                               <tr className="border-b border-emerald-200 dark:border-emerald-800/60 text-[11px] text-slate-500 dark:text-slate-400">
-                                <th className="py-1.5 pr-3 font-medium">Payment No.</th>
-                                <th className="py-1.5 pr-3 font-medium">Payment Date</th>
-                                <th className="py-1.5 pr-3 font-medium">Mode</th>
-                                <th className="py-1.5 pr-3 font-medium">UTR / Reference</th>
-                                <th className="py-1.5 pr-3 font-medium text-right">Amount</th>
-                                <th className="py-1.5 pr-3 font-medium text-right">Reversal</th>
-                                <th className="py-1.5 font-medium text-right">Net Amount</th>
+                                <th className="py-1.5 pr-3 font-medium whitespace-nowrap">Payment No.</th>
+                                <th className="py-1.5 pr-3 font-medium whitespace-nowrap">Payment Date</th>
+                                <th className="py-1.5 pr-3 font-medium whitespace-nowrap">Mode</th>
+                                <th className="py-1.5 pr-3 font-medium whitespace-nowrap">UTR / Reference</th>
+                                <th className="py-1.5 pr-3 font-medium whitespace-nowrap">Paid Together (Invoice Numbers)</th>
+                                <th className="py-1.5 pr-3 font-medium text-right whitespace-nowrap">Amount</th>
+                                <th className="py-1.5 pr-3 font-medium text-right whitespace-nowrap">Reversal</th>
+                                <th className="py-1.5 font-medium text-right whitespace-nowrap">Net Amount</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-emerald-100 dark:divide-emerald-900/40 font-mono">
-                              {linkedPayments.map((pmt) => (
-                                <tr key={pmt.id}>
-                                  <td className="py-2 pr-3 font-semibold text-slate-900 dark:text-white">
-                                    {pmt.paymentNumber || '—'}
-                                  </td>
-                                  <td className="py-2 pr-3">{pmt.paymentDate || '—'}</td>
-                                  <td className="py-2 pr-3">{pmt.paymentType || 'NEFT'}</td>
-                                  <td className="py-2 pr-3 text-amber-700 dark:text-amber-300">
-                                    {pmt.paymentReferenceNo || '—'}
-                                  </td>
-                                  <td className="py-2 pr-3 text-right">{formatINR(pmt.amount)}</td>
-                                  <td className="py-2 pr-3 text-right text-red-600 dark:text-red-400">
-                                    {pmt.reversal ? formatINR(pmt.reversal) : '—'}
-                                  </td>
-                                  <td className="py-2 text-right font-bold text-emerald-700 dark:text-emerald-400">
-                                    {formatINR(pmt.netAmount)}
-                                  </td>
-                                </tr>
-                              ))}
+                              {linkedPayments.map((pmt) => {
+                                const batchInvoices = getBatchInvoiceNumbers(pmt);
+                                return (
+                                  <tr key={pmt.id} className="align-top">
+                                    <td className="py-2 pr-3 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
+                                      {pmt.paymentNumber || '—'}
+                                    </td>
+                                    <td className="py-2 pr-3 whitespace-nowrap">{pmt.paymentDate || '—'}</td>
+                                    <td className="py-2 pr-3 whitespace-nowrap">{pmt.paymentType || 'NEFT'}</td>
+                                    <td className="py-2 pr-3 text-amber-700 dark:text-amber-300 whitespace-nowrap">
+                                      {pmt.paymentReferenceNo || '—'}
+                                    </td>
+                                    <td className="py-2 pr-3 min-w-[220px]">
+                                      {batchInvoices.length > 0 ? (
+                                        <div className="space-y-1">
+                                          <div className="flex flex-wrap gap-1">
+                                            {batchInvoices.map((invNum) => {
+                                              const isCurrent = invNum.toLowerCase() === invNumLower;
+                                              return (
+                                                <button
+                                                  key={invNum}
+                                                  type="button"
+                                                  onClick={() => onSearchInvoice?.(invNum)}
+                                                  title={isCurrent ? 'Currently viewed invoice' : `Search details for ${invNum}`}
+                                                  className={`px-1.5 py-0.5 rounded text-[11px] font-semibold border transition-colors ${
+                                                    isCurrent
+                                                      ? 'bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-500 dark:text-slate-950 dark:border-emerald-500'
+                                                      : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-emerald-300 dark:border-emerald-800 hover:bg-amber-50 dark:hover:bg-slate-800 hover:border-amber-400'
+                                                  }`}
+                                                >
+                                                  {invNum}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                          {batchInvoices.length > 1 && (
+                                            <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
+                                              {batchInvoices.length} invoices paid together in this batch
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-slate-400">—</span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 pr-3 text-right whitespace-nowrap">{formatINR(pmt.amount)}</td>
+                                    <td className="py-2 pr-3 text-right text-red-600 dark:text-red-400 whitespace-nowrap">
+                                      {pmt.reversal ? formatINR(pmt.reversal) : '—'}
+                                    </td>
+                                    <td className="py-2 text-right font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                                      {formatINR(pmt.netAmount)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
